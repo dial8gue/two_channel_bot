@@ -34,9 +34,9 @@ class MessageFormatter:
             
             # Add footer
             if from_cache:
-                footer = "\n\n_Анализ выполнен с помощью AI (из кеша)_"
+                footer = "\n\n_Анализ выполнен роботами (из кеша)_"
             else:
-                footer = "\n\n_Анализ выполнен с помощью AI_"
+                footer = "\n\n_Анализ выполнен роботами_"
             
             result = header + formatted_analysis + footer
             
