@@ -41,6 +41,11 @@ class Config:
     buffer_size: int
     buffer_flush_interval_seconds: int
     
+    # Message Formatting
+    default_parse_mode: str
+    enable_markdown_escaping: bool
+    max_message_length: int
+    
     @classmethod
     def from_env(cls) -> "Config":
         """
@@ -73,6 +78,9 @@ class Config:
         collection_enabled = cls._get_bool_env("COLLECTION_ENABLED", default=True)
         buffer_size = cls._get_int_env("BUFFER_SIZE", default=50)  # Flush after 50 messages
         buffer_flush_interval_seconds = cls._get_int_env("BUFFER_FLUSH_INTERVAL_SECONDS", default=30)  # Flush every 30 seconds
+        default_parse_mode = os.getenv("DEFAULT_PARSE_MODE", "Markdown")
+        enable_markdown_escaping = cls._get_bool_env("ENABLE_MARKDOWN_ESCAPING", default=True)
+        max_message_length = cls._get_int_env("MAX_MESSAGE_LENGTH", default=4096)
         
         # Validate positive values
         cls._validate_positive("MAX_TOKENS", max_tokens)
@@ -82,6 +90,12 @@ class Config:
         cls._validate_positive("DEBOUNCE_INTERVAL_SECONDS", debounce_interval_seconds)
         cls._validate_positive("BUFFER_SIZE", buffer_size)
         cls._validate_positive("BUFFER_FLUSH_INTERVAL_SECONDS", buffer_flush_interval_seconds)
+        cls._validate_positive("MAX_MESSAGE_LENGTH", max_message_length)
+        
+        # Validate parse mode
+        valid_parse_modes = ["Markdown", "HTML", "None", None]
+        if default_parse_mode not in valid_parse_modes:
+            raise ValueError(f"DEFAULT_PARSE_MODE must be one of {valid_parse_modes}, got: {default_parse_mode}")
         
         return cls(
             bot_token=bot_token,
@@ -99,6 +113,9 @@ class Config:
             collection_enabled=collection_enabled,
             buffer_size=buffer_size,
             buffer_flush_interval_seconds=buffer_flush_interval_seconds,
+            default_parse_mode=default_parse_mode,
+            enable_markdown_escaping=enable_markdown_escaping,
+            max_message_length=max_message_length,
         )
     
     @staticmethod

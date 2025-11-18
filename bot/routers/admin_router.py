@@ -6,6 +6,7 @@ from typing import Optional
 from aiogram import Router
 from aiogram.types import Message
 from aiogram.filters import Command
+from aiogram.exceptions import TelegramBadRequest
 
 from bot.filters.admin_filter import IsAdminFilter
 from services.analysis_service import AnalysisService
@@ -89,7 +90,9 @@ def create_admin_router(config: Config) -> Router:
                 formatted_result = MessageFormatter.format_analysis_result(
                     analysis=analysis_result,
                     period_hours=period_hours,
-                    from_cache=from_cache
+                    from_cache=from_cache,
+                    parse_mode=config.default_parse_mode,
+                    max_length=config.max_message_length
                 )
                 
                 # Determine where to send the result
@@ -107,12 +110,90 @@ def create_admin_router(config: Config) -> Router:
                 # Delete processing message
                 await processing_msg.delete()
                 
-                # Send result
-                await message.bot.send_message(
-                    chat_id=target_chat_id,
-                    text=formatted_result,
-                    parse_mode="Markdown"
-                )
+                # Handle both single string and list return from formatter
+                if isinstance(formatted_result, str):
+                    messages_to_send = [formatted_result]
+                else:
+                    messages_to_send = formatted_result
+                
+                # Send message(s) with three-tier fallback: Markdown → HTML → Plain text
+                for idx, msg_text in enumerate(messages_to_send):
+                    try:
+                        # Tier 1: Try configured parse mode
+                        await message.bot.send_message(
+                            chat_id=target_chat_id,
+                            text=msg_text,
+                            parse_mode=config.default_parse_mode
+                        )
+                        logger.debug(f"Message {idx + 1}/{len(messages_to_send)} sent successfully with {config.default_parse_mode}")
+                        
+                    except TelegramBadRequest as e:
+                        if "can't parse entities" in str(e).lower():
+                            # Tier 2: Fallback to HTML
+                            logger.warning(
+                                f"Markdown parsing failed for message {idx + 1}/{len(messages_to_send)}, trying HTML: {e}",
+                                extra={"error": str(e), "message_length": len(msg_text)}
+                            )
+                            try:
+                                # Re-format the original analysis with HTML
+                                html_result = MessageFormatter.format_analysis_result(
+                                    analysis=analysis_result,
+                                    period_hours=period_hours,
+                                    from_cache=from_cache,
+                                    parse_mode="HTML",
+                                    max_length=config.max_message_length
+                                )
+                                
+                                # Handle single string or list
+                                if isinstance(html_result, str):
+                                    html_messages = [html_result]
+                                else:
+                                    html_messages = html_result
+                                
+                                # Send the corresponding chunk
+                                html_text = html_messages[idx] if idx < len(html_messages) else html_messages[0]
+                                
+                                await message.bot.send_message(
+                                    chat_id=target_chat_id,
+                                    text=html_text,
+                                    parse_mode="HTML"
+                                )
+                                logger.info(f"Message {idx + 1}/{len(messages_to_send)} sent successfully with HTML fallback")
+                                
+                            except TelegramBadRequest as html_error:
+                                # Tier 3: Final fallback to plain text
+                                logger.error(
+                                    f"HTML parsing also failed for message {idx + 1}/{len(messages_to_send)}, using plain text: {html_error}",
+                                    extra={"error": str(html_error), "message_length": len(msg_text)}
+                                )
+                                
+                                # Re-format the original analysis with plain text
+                                plain_result = MessageFormatter.format_analysis_result(
+                                    analysis=analysis_result,
+                                    period_hours=period_hours,
+                                    from_cache=from_cache,
+                                    parse_mode=None,
+                                    max_length=config.max_message_length
+                                )
+                                
+                                # Handle single string or list
+                                if isinstance(plain_result, str):
+                                    plain_messages = [plain_result]
+                                else:
+                                    plain_messages = plain_result
+                                
+                                # Send the corresponding chunk
+                                plain_text = plain_messages[idx] if idx < len(plain_messages) else plain_messages[0]
+                                
+                                await message.bot.send_message(
+                                    chat_id=target_chat_id,
+                                    text=plain_text,
+                                    parse_mode=None
+                                )
+                                logger.info(f"Message {idx + 1}/{len(messages_to_send)} sent successfully with plain text fallback")
+                        else:
+                            # Re-raise if it's a different error
+                            raise
                 
                 logger.info(
                     "Analysis completed and sent",
@@ -120,7 +201,8 @@ def create_admin_router(config: Config) -> Router:
                         "admin_id": message.from_user.id,
                         "period_hours": period_hours,
                         "from_cache": from_cache,
-                        "target_chat_id": target_chat_id
+                        "target_chat_id": target_chat_id,
+                        "message_count": len(messages_to_send)
                     }
                 )
                 
