@@ -7,6 +7,7 @@ from aiogram import Router
 from aiogram.types import Message
 from aiogram.filters import Command
 from aiogram.exceptions import TelegramBadRequest
+from aiogram.enums import ParseMode
 
 from bot.filters.admin_filter import IsAdminFilter
 from services.analysis_service import AnalysisService
@@ -16,6 +17,26 @@ from config.settings import Config
 
 
 logger = logging.getLogger(__name__)
+
+
+def _get_parse_mode(mode_str: str) -> ParseMode | None:
+    """
+    Convert string parse mode to ParseMode enum.
+    
+    Args:
+        mode_str: String representation ("Markdown", "HTML", "None", or None)
+        
+    Returns:
+        ParseMode enum value or None
+    """
+    if not mode_str or mode_str == "None":
+        return None
+    elif mode_str == "Markdown":
+        return ParseMode.MARKDOWN
+    elif mode_str == "HTML":
+        return ParseMode.HTML
+    else:
+        return None
 
 
 def create_admin_router(config: Config) -> Router:
@@ -120,10 +141,11 @@ def create_admin_router(config: Config) -> Router:
                 for idx, msg_text in enumerate(messages_to_send):
                     try:
                         # Tier 1: Try configured parse mode
+                        parse_mode_enum = _get_parse_mode(config.default_parse_mode)
                         await message.bot.send_message(
                             chat_id=target_chat_id,
                             text=msg_text,
-                            parse_mode=config.default_parse_mode
+                            parse_mode=parse_mode_enum
                         )
                         logger.debug(f"Message {idx + 1}/{len(messages_to_send)} sent successfully with {config.default_parse_mode}")
                         
@@ -156,7 +178,7 @@ def create_admin_router(config: Config) -> Router:
                                 await message.bot.send_message(
                                     chat_id=target_chat_id,
                                     text=html_text,
-                                    parse_mode="HTML"
+                                    parse_mode=ParseMode.HTML
                                 )
                                 logger.info(f"Message {idx + 1}/{len(messages_to_send)} sent successfully with HTML fallback")
                                 
@@ -454,7 +476,7 @@ def create_admin_router(config: Config) -> Router:
             # Format statistics
             formatted_stats = MessageFormatter.format_stats(stats)
             
-            await message.answer(formatted_stats, parse_mode="Markdown")
+            await message.answer(formatted_stats, parse_mode=ParseMode.MARKDOWN)
             
             logger.info(
                 "Statistics sent",
