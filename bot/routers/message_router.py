@@ -17,7 +17,10 @@ logger = logging.getLogger(__name__)
 router = Router(name="message_router")
 
 
-@router.message(lambda message: message.chat.type in [ChatType.GROUP, ChatType.SUPERGROUP])
+@router.message(
+    lambda message: message.chat.type in [ChatType.GROUP, ChatType.SUPERGROUP],
+    lambda message: not message.text or not message.text.startswith('/')
+)
 async def handle_group_message(message: Message, message_service: MessageService):
     """
     Handle incoming messages from group chats.
