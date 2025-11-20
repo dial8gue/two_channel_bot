@@ -61,10 +61,16 @@ async def _perform_analysis_and_send(
         chat_id_to_analyze: Chat ID to analyze (None for all)
         admin_id: Admin user ID for logging
     """
-    # Perform analysis
-    analysis_result, from_cache = await analysis_service.analyze_messages(
-        hours=hours,
-        chat_id=chat_id_to_analyze
+    # Perform analysis with debounce bypass for admin
+    # Use chat_id_to_analyze or 0 for operation key (0 means "all chats")
+    operation_chat_id = chat_id_to_analyze if chat_id_to_analyze is not None else 0
+    
+    analysis_result, from_cache = await analysis_service.analyze_messages_with_debounce(
+        hours=hours or config.analysis_period_hours,
+        chat_id=operation_chat_id,
+        user_id=admin_id,
+        operation_type="admin_analyze",
+        bypass_debounce=True  # Admin bypasses debounce
     )
     
     # Format result
