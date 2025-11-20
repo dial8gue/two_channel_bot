@@ -464,9 +464,8 @@ class TestFormatAnalysisResult:
         # Should contain header with Markdown formatting
         assert "📊 *Анализ сообщений за последние 24 ч*" in result
         
-        # Analysis content should NOT be escaped (plain text from OpenAI)
-        assert "*special*" in result
-        assert "\\*special\\*" not in result
+        # Should escape special characters in analysis content
+        assert "\\*special\\*" in result
         
         # Should contain footer with Markdown formatting
         assert "_Анализ выполнен роботами_" in result
@@ -512,9 +511,11 @@ class TestFormatAnalysisResult:
         # Should contain header without formatting
         assert "📊 Анализ сообщений за последние 6 ч" in result
         
-        # Analysis content should be kept as-is (plain text mode)
-        assert "**bold**" in result
-        assert "*italic*" in result
+        # Should strip formatting from analysis content
+        assert "bold" in result
+        assert "italic" in result
+        assert "**" not in result
+        assert "*" not in result or "\\*" not in result  # Either stripped or escaped
         
         # Should contain footer without formatting
         assert "Анализ выполнен роботами" in result

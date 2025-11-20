@@ -231,16 +231,18 @@ class MessageFormatter:
             else:
                 header = f"📊 Анализ сообщений за последние {period_hours} ч\n\n"
             
-            # Don't escape the analysis text - it's plain text from OpenAI
-            # Only escape HTML special characters if using HTML mode
+            # Apply appropriate escaping function based on parse_mode
             formatted_analysis = analysis.strip()
             
-            if parse_mode == "HTML":
-                # Only escape HTML special characters: < > &
-                formatted_analysis = formatted_analysis.replace('&', '&amp;')
-                formatted_analysis = formatted_analysis.replace('<', '&lt;')
-                formatted_analysis = formatted_analysis.replace('>', '&gt;')
-            # For Markdown and plain text modes, use the text as-is
+            if parse_mode == "Markdown":
+                # Escape Markdown special characters in analysis content
+                formatted_analysis = MessageFormatter.escape_markdown_v1(formatted_analysis)
+            elif parse_mode == "HTML":
+                # Convert to HTML format and escape HTML special characters
+                formatted_analysis = MessageFormatter.convert_to_html(formatted_analysis)
+            else:
+                # Plain text - strip any formatting
+                formatted_analysis = MessageFormatter.strip_formatting(formatted_analysis)
             
             # Add footer (with intentional formatting preserved)
             if parse_mode == "Markdown":
@@ -279,7 +281,7 @@ class MessageFormatter:
             try:
                 # Strip all formatting and create a simple plain text message
                 plain_header = f"📊 Анализ сообщений за последние {period_hours} ч\n\n"
-                plain_analysis = analysis.strip()
+                plain_analysis = MessageFormatter.strip_formatting(analysis.strip())
                 plain_footer = "\n\nАнализ выполнен роботами (из кеша)" if from_cache else "\n\nАнализ выполнен роботами"
                 
                 plain_result = plain_header + plain_analysis + plain_footer
