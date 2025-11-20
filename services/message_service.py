@@ -244,3 +244,24 @@ class MessageService:
                 exc_info=True
             )
             raise
+
+    async def get_available_chats(self) -> List[dict]:
+        """
+        Get list of available chats with message counts.
+        
+        Returns:
+            List of dicts with chat_id and message_count
+        """
+        try:
+            chats = await self.message_repository.get_distinct_chats()
+            
+            logger.info(
+                "Available chats retrieved",
+                extra={"chat_count": len(chats)}
+            )
+            
+            return chats
+            
+        except Exception as e:
+            logger.error(f"Failed to get available chats: {e}", exc_info=True)
+            raise

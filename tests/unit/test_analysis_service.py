@@ -178,9 +178,24 @@ class TestAnalysisService:
     @pytest.mark.asyncio
     async def test_generate_cache_key_different_messages(self, analysis_service, sample_messages):
         """Test cache key changes with different messages."""
-        # Arrange
-        modified_messages = sample_messages.copy()
-        modified_messages[0].text = "Different text"
+        # Arrange - Create a deep copy with modified text
+        from datetime import datetime, timedelta
+        from database.models import MessageModel
+        
+        now = datetime.now()
+        modified_messages = [
+            MessageModel(
+                id=1,
+                message_id=1,
+                chat_id=-100123456789,
+                user_id=1,
+                username="user1",
+                text="Different text",  # Changed text
+                timestamp=now - timedelta(hours=1),
+                reactions={"👍": 5}
+            ),
+            sample_messages[1]  # Keep second message the same
+        ]
         
         # Act
         key1 = analysis_service._generate_cache_key(sample_messages)

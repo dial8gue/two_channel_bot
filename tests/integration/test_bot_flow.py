@@ -130,7 +130,7 @@ class TestBotFlow:
         assert messages[1].text == "Hello everyone!"
     
     @pytest.mark.asyncio
-    async def test_analysis_flow_with_cache(self, services, mock_openai_client):
+    async def test_analysis_flow_with_cache(self, services, mock_openai_client, temp_db):
         """Test complete analysis flow with caching."""
         # Arrange
         message_service = services['message']
@@ -150,7 +150,20 @@ class TestBotFlow:
         # Act - First analysis (should call OpenAI)
         result1, from_cache1 = await analysis_service.analyze_messages(hours=24)
         
-        # Act - Second analysis (should use cache)
+        # Clear debounce by setting old execution time directly in database
+        conn = await temp_db.get_connection()
+        old_time = now - timedelta(seconds=400)
+        await conn.execute(
+            """
+            UPDATE debounce 
+            SET last_execution = ? 
+            WHERE operation = ?
+            """,
+            (old_time, analysis_service.ANALYSIS_OPERATION)
+        )
+        await conn.commit()
+        
+        # Act - Second analysis (should use cache, not debounced)
         result2, from_cache2 = await analysis_service.analyze_messages(hours=24)
         
         # Assert

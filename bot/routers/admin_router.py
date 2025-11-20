@@ -4,14 +4,15 @@ import logging
 from typing import Optional
 
 from aiogram import Router
-from aiogram.types import Message
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import Command
 from aiogram.exceptions import TelegramBadRequest
-from aiogram.enums import ParseMode
+from aiogram.enums import ParseMode, ChatType
 
 from bot.filters.admin_filter import IsAdminFilter
 from services.analysis_service import AnalysisService
 from services.admin_service import AdminService
+from services.message_service import MessageService
 from utils.message_formatter import MessageFormatter
 from config.settings import Config
 
@@ -39,6 +40,129 @@ def _get_parse_mode(mode_str: str) -> ParseMode | None:
         return None
 
 
+async def _perform_analysis_and_send(
+    bot,
+    target_chat_id: int,
+    analysis_service: AnalysisService,
+    config: Config,
+    hours: Optional[int],
+    chat_id_to_analyze: Optional[int],
+    admin_id: int
+):
+    """
+    Helper function to perform analysis and send results with fallback formatting.
+    
+    Args:
+        bot: Bot instance
+        target_chat_id: Where to send the result
+        analysis_service: Service for analysis
+        config: Bot configuration
+        hours: Hours to analyze
+        chat_id_to_analyze: Chat ID to analyze (None for all)
+        admin_id: Admin user ID for logging
+    """
+    # Perform analysis
+    analysis_result, from_cache = await analysis_service.analyze_messages(
+        hours=hours,
+        chat_id=chat_id_to_analyze
+    )
+    
+    # Format result
+    period_hours = hours or config.analysis_period_hours
+    formatted_result = MessageFormatter.format_analysis_result(
+        analysis=analysis_result,
+        period_hours=period_hours,
+        from_cache=from_cache,
+        parse_mode=config.default_parse_mode,
+        max_length=config.max_message_length
+    )
+    
+    # Handle both single string and list return from formatter
+    if isinstance(formatted_result, str):
+        messages_to_send = [formatted_result]
+    else:
+        messages_to_send = formatted_result
+    
+    # Send message(s) with three-tier fallback: Markdown → HTML → Plain text
+    for idx, msg_text in enumerate(messages_to_send):
+        try:
+            # Tier 1: Try configured parse mode
+            parse_mode_enum = _get_parse_mode(config.default_parse_mode)
+            await bot.send_message(
+                chat_id=target_chat_id,
+                text=msg_text,
+                parse_mode=parse_mode_enum
+            )
+            logger.debug(f"Message {idx + 1}/{len(messages_to_send)} sent successfully")
+            
+        except TelegramBadRequest as e:
+            if "can't parse entities" in str(e).lower():
+                # Tier 2: Fallback to HTML
+                logger.warning(f"Markdown parsing failed, trying HTML: {e}")
+                try:
+                    html_result = MessageFormatter.format_analysis_result(
+                        analysis=analysis_result,
+                        period_hours=period_hours,
+                        from_cache=from_cache,
+                        parse_mode="HTML",
+                        max_length=config.max_message_length
+                    )
+                    
+                    if isinstance(html_result, str):
+                        html_messages = [html_result]
+                    else:
+                        html_messages = html_result
+                    
+                    html_text = html_messages[idx] if idx < len(html_messages) else html_messages[0]
+                    
+                    await bot.send_message(
+                        chat_id=target_chat_id,
+                        text=html_text,
+                        parse_mode=ParseMode.HTML
+                    )
+                    logger.info("Message sent with HTML fallback")
+                    
+                except TelegramBadRequest as html_error:
+                    # Tier 3: Final fallback to plain text
+                    logger.error(f"HTML parsing also failed, using plain text: {html_error}")
+                    
+                    plain_result = MessageFormatter.format_analysis_result(
+                        analysis=analysis_result,
+                        period_hours=period_hours,
+                        from_cache=from_cache,
+                        parse_mode=None,
+                        max_length=config.max_message_length
+                    )
+                    
+                    if isinstance(plain_result, str):
+                        plain_messages = [plain_result]
+                    else:
+                        plain_messages = plain_result
+                    
+                    plain_text = plain_messages[idx] if idx < len(plain_messages) else plain_messages[0]
+                    
+                    await bot.send_message(
+                        chat_id=target_chat_id,
+                        text=plain_text,
+                        parse_mode=None
+                    )
+                    logger.info("Message sent with plain text fallback")
+            else:
+                raise
+    
+    logger.info(
+        "Analysis completed and sent",
+        extra={
+            "admin_id": admin_id,
+            "period_hours": period_hours,
+            "from_cache": from_cache,
+            "target_chat_id": target_chat_id,
+            "chat_id_analyzed": chat_id_to_analyze,
+            "message_count": len(messages_to_send)
+        }
+    )
+
+
 def create_admin_router(config: Config) -> Router:
     """
     Create and configure the admin router with all command handlers.
@@ -60,6 +184,7 @@ def create_admin_router(config: Config) -> Router:
     async def cmd_analyze(
         message: Message,
         analysis_service: AnalysisService,
+        message_service: MessageService,
         config: Config
     ):
         """
@@ -72,6 +197,7 @@ def create_admin_router(config: Config) -> Router:
         Args:
             message: Command message from admin
             analysis_service: Service for message analysis
+            message_service: Service for message operations
             config: Bot configuration
         """
         try:
@@ -87,157 +213,90 @@ def create_admin_router(config: Config) -> Router:
                     await message.answer("❌ Неверный формат. Используйте: /analyze [часы]")
                     return
             
-            # Send processing message
-            processing_msg = await message.answer("⏳ Анализирую сообщения...")
-            
             logger.info(
                 "Analysis command received",
                 extra={
                     "admin_id": message.from_user.id,
                     "hours": hours,
-                    "chat_id": message.chat.id
+                    "chat_id": message.chat.id,
+                    "chat_type": message.chat.type
                 }
             )
             
-            # Perform analysis
-            try:
-                analysis_result, from_cache = await analysis_service.analyze_messages(
-                    hours=hours,
-                    chat_id=None  # Analyze all chats
-                )
+            # Determine which chat to analyze based on where command was sent
+            if message.chat.type in [ChatType.GROUP, ChatType.SUPERGROUP]:
+                # Command from group - analyze this group directly
+                chat_id_to_analyze = message.chat.id
+                logger.debug(f"Analyzing group chat: {chat_id_to_analyze}")
                 
-                # Format result
-                period_hours = hours or config.analysis_period_hours
-                formatted_result = MessageFormatter.format_analysis_result(
-                    analysis=analysis_result,
-                    period_hours=period_hours,
-                    from_cache=from_cache,
-                    parse_mode=config.default_parse_mode,
-                    max_length=config.max_message_length
-                )
+                processing_msg = await message.answer("⏳ Анализирую сообщения...")
                 
-                # Determine where to send the result
-                if config.debug_mode:
-                    # Debug mode: send to admin in private chat
-                    target_chat_id = message.from_user.id
-                    logger.info("Sending analysis to admin (debug mode)")
-                else:
-                    # Normal mode: send to the group chat
-                    # We need to get the group chat ID - for now, send to admin
-                    # In production, this should be configured or detected
-                    target_chat_id = message.from_user.id
-                    logger.info("Sending analysis to admin (no group chat configured)")
+                try:
+                    await _perform_analysis_and_send(
+                        bot=message.bot,
+                        target_chat_id=message.from_user.id if config.debug_mode else message.chat.id,
+                        analysis_service=analysis_service,
+                        config=config,
+                        hours=hours,
+                        chat_id_to_analyze=chat_id_to_analyze,
+                        admin_id=message.from_user.id
+                    )
+                    await processing_msg.delete()
+                    
+                except ValueError as e:
+                    await processing_msg.delete()
+                    await message.answer(f"⚠️ {str(e)}")
+                    
+                except Exception as e:
+                    logger.error(f"Analysis failed: {e}", exc_info=True)
+                    await processing_msg.delete()
+                    await message.answer("❌ Ошибка при анализе сообщений. Проверьте логи для деталей.")
+                    
+            else:
+                # Command from private chat - show chat selection
+                logger.debug("Command from private chat, showing chat selection")
                 
-                # Delete processing message
-                await processing_msg.delete()
+                available_chats = await message_service.get_available_chats()
                 
-                # Handle both single string and list return from formatter
-                if isinstance(formatted_result, str):
-                    messages_to_send = [formatted_result]
-                else:
-                    messages_to_send = formatted_result
+                if not available_chats:
+                    await message.answer("❌ Нет доступных чатов с сообщениями.")
+                    return
                 
-                # Send message(s) with three-tier fallback: Markdown → HTML → Plain text
-                for idx, msg_text in enumerate(messages_to_send):
+                # Create inline keyboard with chat options
+                keyboard_buttons = []
+                
+                for chat in available_chats:
+                    chat_id = chat["chat_id"]
+                    msg_count = chat["message_count"]
+                    
+                    # Try to get chat info
                     try:
-                        # Tier 1: Try configured parse mode
-                        parse_mode_enum = _get_parse_mode(config.default_parse_mode)
-                        await message.bot.send_message(
-                            chat_id=target_chat_id,
-                            text=msg_text,
-                            parse_mode=parse_mode_enum
-                        )
-                        logger.debug(f"Message {idx + 1}/{len(messages_to_send)} sent successfully with {config.default_parse_mode}")
-                        
-                    except TelegramBadRequest as e:
-                        if "can't parse entities" in str(e).lower():
-                            # Tier 2: Fallback to HTML
-                            logger.warning(
-                                f"Markdown parsing failed for message {idx + 1}/{len(messages_to_send)}, trying HTML: {e}",
-                                extra={"error": str(e), "message_length": len(msg_text)}
-                            )
-                            try:
-                                # Re-format the original analysis with HTML
-                                html_result = MessageFormatter.format_analysis_result(
-                                    analysis=analysis_result,
-                                    period_hours=period_hours,
-                                    from_cache=from_cache,
-                                    parse_mode="HTML",
-                                    max_length=config.max_message_length
-                                )
-                                
-                                # Handle single string or list
-                                if isinstance(html_result, str):
-                                    html_messages = [html_result]
-                                else:
-                                    html_messages = html_result
-                                
-                                # Send the corresponding chunk
-                                html_text = html_messages[idx] if idx < len(html_messages) else html_messages[0]
-                                
-                                await message.bot.send_message(
-                                    chat_id=target_chat_id,
-                                    text=html_text,
-                                    parse_mode=ParseMode.HTML
-                                )
-                                logger.info(f"Message {idx + 1}/{len(messages_to_send)} sent successfully with HTML fallback")
-                                
-                            except TelegramBadRequest as html_error:
-                                # Tier 3: Final fallback to plain text
-                                logger.error(
-                                    f"HTML parsing also failed for message {idx + 1}/{len(messages_to_send)}, using plain text: {html_error}",
-                                    extra={"error": str(html_error), "message_length": len(msg_text)}
-                                )
-                                
-                                # Re-format the original analysis with plain text
-                                plain_result = MessageFormatter.format_analysis_result(
-                                    analysis=analysis_result,
-                                    period_hours=period_hours,
-                                    from_cache=from_cache,
-                                    parse_mode=None,
-                                    max_length=config.max_message_length
-                                )
-                                
-                                # Handle single string or list
-                                if isinstance(plain_result, str):
-                                    plain_messages = [plain_result]
-                                else:
-                                    plain_messages = plain_result
-                                
-                                # Send the corresponding chunk
-                                plain_text = plain_messages[idx] if idx < len(plain_messages) else plain_messages[0]
-                                
-                                await message.bot.send_message(
-                                    chat_id=target_chat_id,
-                                    text=plain_text,
-                                    parse_mode=None
-                                )
-                                logger.info(f"Message {idx + 1}/{len(messages_to_send)} sent successfully with plain text fallback")
-                        else:
-                            # Re-raise if it's a different error
-                            raise
+                        chat_info = await message.bot.get_chat(chat_id)
+                        chat_title = chat_info.title or f"Chat {chat_id}"
+                    except Exception:
+                        chat_title = f"Chat {chat_id}"
+                    
+                    button_text = f"{chat_title} ({msg_count} сообщ.)"
+                    callback_data = f"analyze:{chat_id}:{hours or config.analysis_period_hours}"
+                    
+                    keyboard_buttons.append([
+                        InlineKeyboardButton(text=button_text, callback_data=callback_data)
+                    ])
                 
-                logger.info(
-                    "Analysis completed and sent",
-                    extra={
-                        "admin_id": message.from_user.id,
-                        "period_hours": period_hours,
-                        "from_cache": from_cache,
-                        "target_chat_id": target_chat_id,
-                        "message_count": len(messages_to_send)
-                    }
-                )
+                # Add "All chats" option
+                total_messages = sum(chat["message_count"] for chat in available_chats)
+                keyboard_buttons.append([
+                    InlineKeyboardButton(
+                        text=f"📊 Все чаты ({total_messages} сообщ.)",
+                        callback_data=f"analyze:all:{hours or config.analysis_period_hours}"
+                    )
+                ])
                 
-            except ValueError as e:
-                # Debounce or validation error
-                await processing_msg.delete()
-                await message.answer(f"⚠️ {str(e)}")
+                keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)
                 
-            except Exception as e:
-                logger.error(f"Analysis failed: {e}", exc_info=True)
-                await processing_msg.delete()
                 await message.answer(
-                    "❌ Ошибка при анализе сообщений. Проверьте логи для деталей."
+                    "Выберите чат для анализа:",
+                    reply_markup=keyboard
                 )
                 
         except Exception as e:
@@ -247,6 +306,77 @@ def create_admin_router(config: Config) -> Router:
                 exc_info=True
             )
             await message.answer("❌ Произошла ошибка при выполнении команды.")
+    
+    
+    @router.callback_query(lambda c: c.data and c.data.startswith("analyze:"))
+    async def callback_analyze_chat(
+        callback: CallbackQuery,
+        analysis_service: AnalysisService,
+        config: Config
+    ):
+        """
+        Handle callback from chat selection for analysis.
+        
+        Callback data format: analyze:<chat_id|all>:<hours>
+        
+        Args:
+            callback: Callback query from inline button
+            analysis_service: Service for message analysis
+            config: Bot configuration
+        """
+        try:
+            # Parse callback data
+            _, chat_id_str, hours_str = callback.data.split(":")
+            hours = int(hours_str)
+            
+            # Determine chat_id to analyze
+            chat_id_to_analyze = None if chat_id_str == "all" else int(chat_id_str)
+            
+            # Answer callback to remove loading state
+            await callback.answer()
+            
+            # Edit message to show processing
+            await callback.message.edit_text("⏳ Анализирую сообщения...")
+            
+            logger.info(
+                "Analysis callback received",
+                extra={
+                    "admin_id": callback.from_user.id,
+                    "chat_id_to_analyze": chat_id_to_analyze,
+                    "hours": hours
+                }
+            )
+            
+            try:
+                await _perform_analysis_and_send(
+                    bot=callback.bot,
+                    target_chat_id=callback.from_user.id,
+                    analysis_service=analysis_service,
+                    config=config,
+                    hours=hours,
+                    chat_id_to_analyze=chat_id_to_analyze,
+                    admin_id=callback.from_user.id
+                )
+                await callback.message.delete()
+                
+            except ValueError as e:
+                await callback.message.edit_text(f"⚠️ {str(e)}")
+                
+            except Exception as e:
+                logger.error(f"Analysis failed: {e}", exc_info=True)
+                await callback.message.edit_text("❌ Ошибка при анализе сообщений. Проверьте логи для деталей.")
+                
+        except Exception as e:
+            logger.error(
+                f"Error in analyze callback: {e}",
+                extra={"admin_id": callback.from_user.id if callback.from_user else None},
+                exc_info=True
+            )
+            try:
+                await callback.answer("❌ Произошла ошибка", show_alert=True)
+            except Exception:
+                pass
+
     
     
     @router.message(Command("clear_db"), admin_filter)

@@ -273,6 +273,38 @@ class MessageRepository:
         except Exception as e:
             logger.error(f"Failed to count messages: {e}", exc_info=True)
             raise
+    
+    async def get_distinct_chats(self) -> List[dict]:
+        """
+        Get list of distinct chats with message counts.
+        
+        Returns:
+            List of dicts with chat_id and message_count
+        """
+        conn = await self.db_connection.get_connection()
+        
+        try:
+            cursor = await conn.execute(
+                """
+                SELECT chat_id, COUNT(*) as message_count
+                FROM messages
+                GROUP BY chat_id
+                ORDER BY message_count DESC
+                """
+            )
+            rows = await cursor.fetchall()
+            
+            chats = [
+                {"chat_id": row["chat_id"], "message_count": row["message_count"]}
+                for row in rows
+            ]
+            
+            logger.debug(f"Found {len(chats)} distinct chats")
+            return chats
+            
+        except Exception as e:
+            logger.error(f"Failed to get distinct chats: {e}", exc_info=True)
+            raise
 
 
 class ConfigRepository:
