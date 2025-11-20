@@ -107,14 +107,11 @@ def create_user_router(config: Config) -> Router:
                 error_msg = str(e)
                 
                 # Extract remaining seconds from error message
-                # Expected format: "Operation debounced. Remaining: X seconds"
+                # Expected format: just a number (seconds as string)
                 try:
-                    if "Remaining:" in error_msg:
-                        remaining_seconds = float(error_msg.split("Remaining:")[1].split("seconds")[0].strip())
-                        warning_msg = MessageFormatter.format_debounce_warning("анализ", remaining_seconds)
-                        await processing_msg.edit_text(warning_msg, parse_mode="Markdown")
-                    else:
-                        await processing_msg.edit_text(f"⚠️ {error_msg}")
+                    remaining_seconds = float(error_msg)
+                    warning_msg = MessageFormatter.format_debounce_warning("анализ", remaining_seconds)
+                    await processing_msg.edit_text(warning_msg, parse_mode="Markdown")
                 except Exception:
                     # Fallback if parsing fails
                     await processing_msg.edit_text(f"⚠️ {error_msg}")
@@ -221,14 +218,11 @@ def create_user_router(config: Config) -> Router:
                 error_msg = str(e)
                 
                 # Extract remaining seconds from error message
-                # Expected format: "Operation debounced. Remaining: X seconds"
+                # Expected format: just a number (seconds as string)
                 try:
-                    if "Remaining:" in error_msg:
-                        remaining_seconds = float(error_msg.split("Remaining:")[1].split("seconds")[0].strip())
-                        warning_msg = MessageFormatter.format_debounce_warning("глубокий анализ", remaining_seconds)
-                        await processing_msg.edit_text(warning_msg, parse_mode="Markdown")
-                    else:
-                        await processing_msg.edit_text(f"⚠️ {error_msg}")
+                    remaining_seconds = float(error_msg)
+                    warning_msg = MessageFormatter.format_debounce_warning("глубокий анализ", remaining_seconds)
+                    await processing_msg.edit_text(warning_msg, parse_mode="Markdown")
                 except Exception:
                     # Fallback if parsing fails
                     await processing_msg.edit_text(f"⚠️ {error_msg}")
