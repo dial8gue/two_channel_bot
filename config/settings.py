@@ -28,6 +28,10 @@ class Config:
     # Analysis
     analysis_period_hours: int
     
+    # User Analysis Commands
+    anal_period_hours: int
+    deep_anal_period_hours: int
+    
     # Cache
     cache_ttl_minutes: int
     
@@ -73,6 +77,8 @@ class Config:
         db_path = os.getenv("DB_PATH", "/app/data/bot.db")
         storage_period_hours = cls._get_int_env("STORAGE_PERIOD_HOURS", default=168)  # 7 days
         analysis_period_hours = cls._get_int_env("ANALYSIS_PERIOD_HOURS", default=24)
+        anal_period_hours = cls._get_int_env("ANAL_PERIOD_HOURS", default=6)
+        deep_anal_period_hours = cls._get_int_env("DEEP_ANAL_PERIOD_HOURS", default=12)
         cache_ttl_minutes = cls._get_int_env("CACHE_TTL_MINUTES", default=60)
         debounce_interval_seconds = cls._get_int_env("DEBOUNCE_INTERVAL_SECONDS", default=300)  # 5 minutes
         collection_enabled = cls._get_bool_env("COLLECTION_ENABLED", default=True)
@@ -86,6 +92,8 @@ class Config:
         cls._validate_positive("MAX_TOKENS", max_tokens)
         cls._validate_positive("STORAGE_PERIOD_HOURS", storage_period_hours)
         cls._validate_positive("ANALYSIS_PERIOD_HOURS", analysis_period_hours)
+        cls._validate_positive("ANAL_PERIOD_HOURS", anal_period_hours)
+        cls._validate_positive("DEEP_ANAL_PERIOD_HOURS", deep_anal_period_hours)
         cls._validate_positive("CACHE_TTL_MINUTES", cache_ttl_minutes)
         cls._validate_positive("DEBOUNCE_INTERVAL_SECONDS", debounce_interval_seconds)
         cls._validate_positive("BUFFER_SIZE", buffer_size)
@@ -108,6 +116,8 @@ class Config:
             db_path=db_path,
             storage_period_hours=storage_period_hours,
             analysis_period_hours=analysis_period_hours,
+            anal_period_hours=anal_period_hours,
+            deep_anal_period_hours=deep_anal_period_hours,
             cache_ttl_minutes=cache_ttl_minutes,
             debounce_interval_seconds=debounce_interval_seconds,
             collection_enabled=collection_enabled,

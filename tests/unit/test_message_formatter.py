@@ -774,3 +774,98 @@ class TestFormatAnalysisResult:
         # Each chunk should be within limit
         for chunk in result:
             assert len(chunk) <= 4096
+
+
+
+@pytest.mark.unit
+class TestFormatDebounceWaitTime:
+    """Test cases for format_debounce_wait_time method."""
+    
+    def test_format_hours_minutes_seconds(self):
+        """Test formatting with hours, minutes, and seconds."""
+        # 2 hours, 30 minutes, 15 seconds = 9015 seconds
+        result = MessageFormatter.format_debounce_wait_time(9015)
+        assert result == "2 ч 30 мин 15 сек"
+    
+    def test_format_only_minutes_and_seconds(self):
+        """Test formatting with only minutes and seconds (no hours)."""
+        # 45 minutes, 30 seconds = 2730 seconds
+        result = MessageFormatter.format_debounce_wait_time(2730)
+        assert result == "45 мин 30 сек"
+    
+    def test_format_only_seconds(self):
+        """Test formatting with only seconds."""
+        result = MessageFormatter.format_debounce_wait_time(45)
+        assert result == "45 сек"
+    
+    def test_format_zero_seconds(self):
+        """Test formatting with zero seconds."""
+        result = MessageFormatter.format_debounce_wait_time(0)
+        assert result == "0 сек"
+    
+    def test_format_negative_seconds(self):
+        """Test formatting with negative seconds (edge case)."""
+        result = MessageFormatter.format_debounce_wait_time(-10)
+        assert result == "0 сек"
+    
+    def test_format_one_hour_exactly(self):
+        """Test formatting with exactly one hour."""
+        result = MessageFormatter.format_debounce_wait_time(3600)
+        assert result == "1 ч"
+    
+    def test_format_one_minute_exactly(self):
+        """Test formatting with exactly one minute."""
+        result = MessageFormatter.format_debounce_wait_time(60)
+        assert result == "1 мин"
+    
+    def test_format_hours_and_seconds_no_minutes(self):
+        """Test formatting with hours and seconds but no minutes."""
+        # 2 hours and 15 seconds = 7215 seconds
+        result = MessageFormatter.format_debounce_wait_time(7215)
+        assert result == "2 ч 15 сек"
+    
+    def test_format_hours_and_minutes_no_seconds(self):
+        """Test formatting with hours and minutes but no seconds."""
+        # 3 hours and 45 minutes = 13500 seconds
+        result = MessageFormatter.format_debounce_wait_time(13500)
+        assert result == "3 ч 45 мин"
+    
+    def test_format_minutes_no_seconds(self):
+        """Test formatting with minutes but no seconds."""
+        # 5 minutes exactly = 300 seconds
+        result = MessageFormatter.format_debounce_wait_time(300)
+        assert result == "5 мин"
+    
+    def test_format_very_large_value(self):
+        """Test formatting with very large value (many hours)."""
+        # 100 hours, 30 minutes, 45 seconds = 361845 seconds
+        result = MessageFormatter.format_debounce_wait_time(361845)
+        assert result == "100 ч 30 мин 45 сек"
+    
+    def test_format_fractional_seconds(self):
+        """Test formatting with fractional seconds (should be truncated)."""
+        # 90.7 seconds should become 90 seconds (1 min 30 sec)
+        result = MessageFormatter.format_debounce_wait_time(90.7)
+        assert result == "1 мин 30 сек"
+    
+    def test_format_one_second(self):
+        """Test formatting with one second."""
+        result = MessageFormatter.format_debounce_wait_time(1)
+        assert result == "1 сек"
+    
+    def test_format_59_seconds(self):
+        """Test formatting with 59 seconds (just under a minute)."""
+        result = MessageFormatter.format_debounce_wait_time(59)
+        assert result == "59 сек"
+    
+    def test_format_3599_seconds(self):
+        """Test formatting with 3599 seconds (just under an hour)."""
+        # 59 minutes and 59 seconds
+        result = MessageFormatter.format_debounce_wait_time(3599)
+        assert result == "59 мин 59 сек"
+    
+    def test_format_3661_seconds(self):
+        """Test formatting with 3661 seconds (just over an hour)."""
+        # 1 hour, 1 minute, 1 second
+        result = MessageFormatter.format_debounce_wait_time(3661)
+        assert result == "1 ч 1 мин 1 сек"

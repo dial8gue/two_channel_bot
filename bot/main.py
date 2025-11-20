@@ -29,6 +29,7 @@ from utils.debounce_manager import DebounceManager
 from bot.routers.message_router import router as message_router
 from bot.routers.reaction_router import router as reaction_router
 from bot.routers.admin_router import create_admin_router
+from bot.routers.user_router import create_user_router
 from bot.middlewares.collection_middleware import CollectionMiddleware
 
 
@@ -160,6 +161,10 @@ async def main() -> None:
         # Create and register admin router
         admin_router = create_admin_router(config)
         dp.include_router(admin_router)
+        
+        # Create and register user router
+        user_router = create_user_router(config)
+        dp.include_router(user_router)
         
         # Inject dependencies into handlers
         dp['message_service'] = message_service

@@ -22,7 +22,7 @@ class DebounceManager:
         """
         self.debounce_repository = debounce_repository
     
-    async def can_execute(self, operation: str, interval_seconds: int) -> bool:
+    async def can_execute(self, operation: str, interval_seconds: int) -> tuple[bool, float]:
         """
         Check if an operation can be executed based on debounce interval.
         
@@ -31,7 +31,9 @@ class DebounceManager:
             interval_seconds: Minimum interval between executions in seconds
             
         Returns:
-            True if operation can be executed, False if still in debounce period
+            Tuple of (can_execute, remaining_seconds)
+            - can_execute: True if operation can be executed, False if still in debounce period
+            - remaining_seconds: Seconds remaining in debounce period (0 if can execute)
         """
         try:
             last_execution = await self.debounce_repository.get_last_execution(operation)
@@ -39,7 +41,7 @@ class DebounceManager:
             if last_execution is None:
                 # Never executed before, allow execution
                 logger.debug(f"Operation '{operation}' has no previous execution, allowing")
-                return True
+                return True, 0.0
             
             now = datetime.now()
             time_since_last = (now - last_execution).total_seconds()
@@ -50,7 +52,7 @@ class DebounceManager:
                     f"Operation '{operation}' last executed {time_since_last:.1f}s ago, "
                     f"allowing (interval: {interval_seconds}s)"
                 )
-                return True
+                return True, 0.0
             else:
                 # Still in debounce period, deny execution
                 remaining = interval_seconds - time_since_last
@@ -58,12 +60,46 @@ class DebounceManager:
                     f"Operation '{operation}' is in debounce period. "
                     f"Wait {remaining:.1f}s more (last executed {time_since_last:.1f}s ago)"
                 )
-                return False
+                return False, remaining
                 
         except Exception as e:
             logger.error(f"Error checking debounce for operation '{operation}': {e}")
             # On error, allow execution to avoid blocking legitimate requests
-            return True
+            return True, 0.0
+    
+    async def get_remaining_time(self, operation: str, interval_seconds: int) -> float:
+        """
+        Get remaining debounce time in seconds.
+        
+        Args:
+            operation: Name of the operation to check
+            interval_seconds: Minimum interval between executions in seconds
+            
+        Returns:
+            Remaining seconds in debounce period, or 0 if not debounced
+        """
+        try:
+            last_execution = await self.debounce_repository.get_last_execution(operation)
+            
+            if last_execution is None:
+                # Never executed before, no remaining time
+                return 0.0
+            
+            now = datetime.now()
+            time_since_last = (now - last_execution).total_seconds()
+            
+            if time_since_last >= interval_seconds:
+                # Debounce period has passed
+                return 0.0
+            else:
+                # Calculate remaining time
+                remaining = interval_seconds - time_since_last
+                return remaining
+                
+        except Exception as e:
+            logger.error(f"Error getting remaining time for operation '{operation}': {e}")
+            # On error, return 0 to avoid blocking legitimate requests
+            return 0.0
     
     async def mark_executed(self, operation: str) -> None:
         """

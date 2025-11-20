@@ -53,6 +53,117 @@ class AnalysisService:
         self.cache_ttl_minutes = cache_ttl_minutes
         self.analysis_period_hours = analysis_period_hours
     
+    async def analyze_messages_with_debounce(
+        self,
+        hours: int,
+        chat_id: int,
+        user_id: int,
+        operation_type: str,
+        bypass_debounce: bool = False
+    ) -> tuple[str, bool]:
+        """
+        Analyze messages with chat-level debounce protection.
+        
+        This method wraps analyze_messages with chat-level debounce tracking.
+        The debounce is applied per chat and operation type, allowing different
+        chats to have independent rate limiting.
+        
+        Args:
+            hours: Analysis period in hours
+            chat_id: Chat ID for analysis and debounce tracking
+            user_id: User ID for logging purposes
+            operation_type: Operation identifier (e.g., "anal", "deep_anal")
+            bypass_debounce: If True, skip debounce check (for admin users)
+            
+        Returns:
+            Tuple of (analysis_result, from_cache) where:
+                - analysis_result: The analysis text
+                - from_cache: True if result was from cache, False if new analysis
+                
+        Raises:
+            ValueError: If debounced, with remaining time in seconds in the message
+            Exception: If analysis fails
+        """
+        try:
+            # Format operation key as "{operation_type}:{chat_id}"
+            operation_key = f"{operation_type}:{chat_id}"
+            
+            logger.info(
+                "Starting chat-level debounced analysis",
+                extra={
+                    "operation_key": operation_key,
+                    "user_id": user_id,
+                    "chat_id": chat_id,
+                    "hours": hours,
+                    "bypass_debounce": bypass_debounce
+                }
+            )
+            
+            # Check debounce unless bypassed
+            if not bypass_debounce:
+                can_execute, remaining = await self.debounce_manager.can_execute(
+                    operation=operation_key,
+                    interval_seconds=self.debounce_interval_seconds
+                )
+                
+                if not can_execute:
+                    logger.warning(
+                        f"Analysis blocked by chat-level debounce",
+                        extra={
+                            "operation_key": operation_key,
+                            "user_id": user_id,
+                            "remaining_seconds": remaining
+                        }
+                    )
+                    raise ValueError(f"{remaining}")
+            else:
+                logger.debug(
+                    "Bypassing debounce check",
+                    extra={"user_id": user_id, "operation_key": operation_key}
+                )
+            
+            # Call existing analyze_messages method for actual analysis
+            # Note: We pass chat_id to filter messages for this specific chat
+            analysis_result, from_cache = await self._analyze_without_debounce(
+                hours=hours,
+                chat_id=chat_id
+            )
+            
+            # Mark operation as executed for debounce (only if not from cache)
+            if not from_cache and not bypass_debounce:
+                await self.debounce_manager.mark_executed(operation_key)
+                logger.debug(
+                    f"Marked operation as executed for debounce",
+                    extra={"operation_key": operation_key}
+                )
+            
+            logger.info(
+                "Chat-level debounced analysis completed",
+                extra={
+                    "operation_key": operation_key,
+                    "user_id": user_id,
+                    "from_cache": from_cache
+                }
+            )
+            
+            return analysis_result, from_cache
+            
+        except ValueError:
+            # Re-raise debounce errors
+            raise
+        except Exception as e:
+            logger.error(
+                f"Failed to analyze messages with debounce: {e}",
+                extra={
+                    "operation_type": operation_type,
+                    "chat_id": chat_id,
+                    "user_id": user_id,
+                    "hours": hours
+                },
+                exc_info=True
+            )
+            raise
+    
     async def analyze_messages(
         self,
         hours: Optional[int] = None,
@@ -164,6 +275,83 @@ class AnalysisService:
             )
             raise
     
+    async def _analyze_without_debounce(
+        self,
+        hours: int,
+        chat_id: int
+    ) -> tuple[str, bool]:
+        """
+        Perform analysis without debounce check.
+        
+        This is a helper method used by analyze_messages_with_debounce
+        to perform the actual analysis after debounce has been checked.
+        
+        Args:
+            hours: Number of hours to analyze
+            chat_id: Chat ID to filter messages by
+            
+        Returns:
+            Tuple of (analysis_result, from_cache)
+        """
+        try:
+            # Get messages for the period
+            start_time = datetime.now() - timedelta(hours=hours)
+            messages = await self.message_repository.get_by_period(
+                start_time=start_time,
+                chat_id=chat_id
+            )
+            
+            if not messages:
+                logger.warning("No messages found for analysis period")
+                return "Нет сообщений для анализа за указанный период.", False
+            
+            logger.info(
+                f"Retrieved {len(messages)} messages for analysis",
+                extra={"message_count": len(messages)}
+            )
+            
+            # Generate cache key based on messages
+            cache_key = self._generate_cache_key(messages)
+            
+            # Check cache
+            cached_result = await self.cache_manager.get(cache_key)
+            if cached_result:
+                logger.info("Returning cached analysis result")
+                return cached_result, True
+            
+            # Perform analysis with OpenAI
+            logger.info("Performing new analysis with OpenAI")
+            analysis_result = await self.openai_client.analyze_messages(messages)
+            
+            # Cache the result
+            await self.cache_manager.set(
+                key=cache_key,
+                value=analysis_result,
+                ttl_minutes=self.cache_ttl_minutes
+            )
+            
+            logger.info(
+                "Analysis completed successfully",
+                extra={
+                    "period_hours": hours,
+                    "message_count": len(messages),
+                    "from_cache": False
+                }
+            )
+            
+            return analysis_result, False
+            
+        except Exception as e:
+            logger.error(
+                f"Failed to analyze messages: {e}",
+                extra={
+                    "period_hours": hours,
+                    "chat_id": chat_id
+                },
+                exc_info=True
+            )
+            raise
+    
     async def _check_debounce(self) -> bool:
         """
         Check if analysis can be executed based on debounce interval.
@@ -172,7 +360,7 @@ class AnalysisService:
             True if analysis can be executed, False if still in debounce period
         """
         try:
-            can_execute = await self.debounce_manager.can_execute(
+            can_execute, remaining = await self.debounce_manager.can_execute(
                 operation=self.ANALYSIS_OPERATION,
                 interval_seconds=self.debounce_interval_seconds
             )
@@ -180,7 +368,7 @@ class AnalysisService:
             if not can_execute:
                 logger.warning(
                     f"Analysis blocked by debounce "
-                    f"(interval: {self.debounce_interval_seconds}s)"
+                    f"(interval: {self.debounce_interval_seconds}s, remaining: {remaining:.1f}s)"
                 )
             
             return can_execute
@@ -198,19 +386,11 @@ class AnalysisService:
             Remaining seconds in debounce period, or 0 if not in debounce
         """
         try:
-            from database.repository import DebounceRepository
-            
-            # Access the debounce repository through the manager
-            last_execution = await self.debounce_manager.debounce_repository.get_last_execution(
-                self.ANALYSIS_OPERATION
+            remaining = await self.debounce_manager.get_remaining_time(
+                operation=self.ANALYSIS_OPERATION,
+                interval_seconds=self.debounce_interval_seconds
             )
-            
-            if last_execution:
-                time_since_last = (datetime.now() - last_execution).total_seconds()
-                remaining = max(0, self.debounce_interval_seconds - time_since_last)
-                return remaining
-            
-            return 0
+            return remaining
             
         except Exception as e:
             logger.error(f"Error getting remaining debounce time: {e}")

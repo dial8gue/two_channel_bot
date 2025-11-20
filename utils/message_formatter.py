@@ -376,6 +376,54 @@ class MessageFormatter:
         return f"✅ {message}"
     
     @staticmethod
+    def format_debounce_wait_time(seconds: float) -> str:
+        """
+        Format remaining debounce time in human-readable format.
+        
+        Converts seconds to hours, minutes, and seconds components,
+        omitting zero components for cleaner output.
+        
+        Args:
+            seconds: Remaining time in seconds
+            
+        Returns:
+            Formatted string like "2 ч 30 мин 15 сек" or "45 мин 30 сек"
+            
+        Examples:
+            - 9015 seconds → "2 ч 30 мин 15 сек"
+            - 2730 seconds → "45 мин 30 сек"
+            - 45 seconds → "45 сек"
+            - 0 seconds → "0 сек"
+        """
+        # Handle edge cases
+        if seconds <= 0:
+            return "0 сек"
+        
+        # Convert to integer to avoid fractional components
+        total_seconds = int(seconds)
+        
+        # Calculate components
+        hours = total_seconds // 3600
+        remaining_after_hours = total_seconds % 3600
+        minutes = remaining_after_hours // 60
+        secs = remaining_after_hours % 60
+        
+        # Build time string, omitting zero components
+        parts = []
+        
+        if hours > 0:
+            parts.append(f"{hours} ч")
+        
+        if minutes > 0:
+            parts.append(f"{minutes} мин")
+        
+        # Always show seconds if it's the only component, or if there are other components
+        if secs > 0 or len(parts) == 0:
+            parts.append(f"{secs} сек")
+        
+        return " ".join(parts)
+    
+    @staticmethod
     def format_debounce_warning(operation: str, remaining_seconds: float) -> str:
         """
         Format debounce warning message.
@@ -387,13 +435,7 @@ class MessageFormatter:
         Returns:
             Formatted warning message
         """
-        minutes = int(remaining_seconds // 60)
-        seconds = int(remaining_seconds % 60)
-        
-        if minutes > 0:
-            time_str = f"{minutes} мин {seconds} сек"
-        else:
-            time_str = f"{seconds} сек"
+        time_str = MessageFormatter.format_debounce_wait_time(remaining_seconds)
         
         return (
             f"⏳ *Слишком частый запрос*\n\n"

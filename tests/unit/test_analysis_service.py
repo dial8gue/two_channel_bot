@@ -93,7 +93,7 @@ class TestAnalysisService:
     ):
         """Test successful message analysis."""
         # Arrange
-        mock_debounce_manager.can_execute.return_value = True
+        mock_debounce_manager.can_execute.return_value = (True, 0.0)
         mock_message_repository.get_by_period.return_value = sample_messages
         mock_cache_manager.get.return_value = None
         mock_openai_client.analyze_messages.return_value = "Analysis result"
@@ -119,7 +119,7 @@ class TestAnalysisService:
     ):
         """Test analysis returns cached result."""
         # Arrange
-        mock_debounce_manager.can_execute.return_value = True
+        mock_debounce_manager.can_execute.return_value = (True, 0.0)
         mock_message_repository.get_by_period.return_value = sample_messages
         mock_cache_manager.get.return_value = "Cached analysis"
         
@@ -138,8 +138,8 @@ class TestAnalysisService:
     ):
         """Test analysis is blocked by debounce."""
         # Arrange
-        mock_debounce_manager.can_execute.return_value = False
-        mock_debounce_manager.debounce_repository.get_last_execution.return_value = datetime.now()
+        mock_debounce_manager.can_execute.return_value = (False, 150.0)
+        mock_debounce_manager.get_remaining_time.return_value = 150.0
         
         # Act & Assert
         with pytest.raises(ValueError, match="Анализ был выполнен недавно"):
@@ -154,7 +154,7 @@ class TestAnalysisService:
     ):
         """Test analysis with no messages."""
         # Arrange
-        mock_debounce_manager.can_execute.return_value = True
+        mock_debounce_manager.can_execute.return_value = (True, 0.0)
         mock_message_repository.get_by_period.return_value = []
         
         # Act
