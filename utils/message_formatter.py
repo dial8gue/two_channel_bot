@@ -235,8 +235,8 @@ class MessageFormatter:
             formatted_analysis = analysis.strip()
             
             if parse_mode == "Markdown":
-                # Escape Markdown special characters in analysis content
-                formatted_analysis = MessageFormatter.escape_markdown_v1(formatted_analysis)
+                # Don't escape - analysis is already in Markdown format from LLM
+                pass
             elif parse_mode == "HTML":
                 # Convert to HTML format and escape HTML special characters
                 formatted_analysis = MessageFormatter.convert_to_html(formatted_analysis)
