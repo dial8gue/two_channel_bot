@@ -2,8 +2,53 @@
 Unit tests for MessageFormatter text escaping functions.
 """
 import pytest
+from aiogram.enums import ParseMode
 
-from utils.message_formatter import MessageFormatter
+from utils.message_formatter import MessageFormatter, get_parse_mode
+
+
+@pytest.mark.unit
+class TestGetParseMode:
+    """Test cases for get_parse_mode function."""
+    
+    def test_markdown_string_to_enum(self):
+        """Test converting 'Markdown' string to ParseMode.MARKDOWN enum."""
+        result = get_parse_mode("Markdown")
+        assert result == ParseMode.MARKDOWN
+    
+    def test_html_string_to_enum(self):
+        """Test converting 'HTML' string to ParseMode.HTML enum."""
+        result = get_parse_mode("HTML")
+        assert result == ParseMode.HTML
+    
+    def test_none_string_to_none(self):
+        """Test converting 'None' string to None."""
+        result = get_parse_mode("None")
+        assert result is None
+    
+    def test_empty_string_to_none(self):
+        """Test converting empty string to None."""
+        result = get_parse_mode("")
+        assert result is None
+    
+    def test_none_value_to_none(self):
+        """Test converting None value to None."""
+        result = get_parse_mode(None)
+        assert result is None
+    
+    def test_invalid_string_to_none(self):
+        """Test converting invalid string to None."""
+        result = get_parse_mode("InvalidMode")
+        assert result is None
+    
+    def test_case_sensitive(self):
+        """Test that function is case-sensitive."""
+        # Lowercase should not match
+        result = get_parse_mode("markdown")
+        assert result is None
+        
+        result = get_parse_mode("html")
+        assert result is None
 
 
 @pytest.mark.unit

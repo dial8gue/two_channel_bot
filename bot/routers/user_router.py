@@ -7,7 +7,7 @@ from aiogram.filters import Command
 from aiogram.enums import ChatType
 
 from services.analysis_service import AnalysisService
-from utils.message_formatter import MessageFormatter
+from utils.message_formatter import MessageFormatter, get_parse_mode
 from config.settings import Config
 
 
@@ -86,12 +86,15 @@ def create_user_router(config: Config) -> Router:
                 # Delete processing message
                 await processing_msg.delete()
                 
+                # Convert parse mode string to enum
+                parse_mode_enum = get_parse_mode(config.default_parse_mode)
+                
                 # Send result (handle both string and list)
                 if isinstance(formatted_result, str):
-                    await message.answer(formatted_result)
+                    await message.answer(formatted_result, parse_mode=parse_mode_enum)
                 else:
                     for msg_text in formatted_result:
-                        await message.answer(msg_text)
+                        await message.answer(msg_text, parse_mode=parse_mode_enum)
                 
                 logger.info(
                     "/anal command completed",
@@ -197,12 +200,15 @@ def create_user_router(config: Config) -> Router:
                 # Delete processing message
                 await processing_msg.delete()
                 
+                # Convert parse mode string to enum
+                parse_mode_enum = get_parse_mode(config.default_parse_mode)
+                
                 # Send result (handle both string and list)
                 if isinstance(formatted_result, str):
-                    await message.answer(formatted_result)
+                    await message.answer(formatted_result, parse_mode=parse_mode_enum)
                 else:
                     for msg_text in formatted_result:
-                        await message.answer(msg_text)
+                        await message.answer(msg_text, parse_mode=parse_mode_enum)
                 
                 logger.info(
                     "/deep_anal command completed",

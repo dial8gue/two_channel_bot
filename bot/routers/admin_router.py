@@ -13,31 +13,11 @@ from bot.filters.admin_filter import IsAdminFilter
 from services.analysis_service import AnalysisService
 from services.admin_service import AdminService
 from services.message_service import MessageService
-from utils.message_formatter import MessageFormatter
+from utils.message_formatter import MessageFormatter, get_parse_mode
 from config.settings import Config
 
 
 logger = logging.getLogger(__name__)
-
-
-def _get_parse_mode(mode_str: str) -> ParseMode | None:
-    """
-    Convert string parse mode to ParseMode enum.
-    
-    Args:
-        mode_str: String representation ("Markdown", "HTML", "None", or None)
-        
-    Returns:
-        ParseMode enum value or None
-    """
-    if not mode_str or mode_str == "None":
-        return None
-    elif mode_str == "Markdown":
-        return ParseMode.MARKDOWN
-    elif mode_str == "HTML":
-        return ParseMode.HTML
-    else:
-        return None
 
 
 async def _perform_analysis_and_send(
@@ -93,7 +73,7 @@ async def _perform_analysis_and_send(
     for idx, msg_text in enumerate(messages_to_send):
         try:
             # Tier 1: Try configured parse mode
-            parse_mode_enum = _get_parse_mode(config.default_parse_mode)
+            parse_mode_enum = get_parse_mode(config.default_parse_mode)
             await bot.send_message(
                 chat_id=target_chat_id,
                 text=msg_text,

@@ -3,10 +3,31 @@ Message formatter for Telegram bot responses.
 """
 import logging
 import re
-from typing import Dict, Any, List, Union
+from typing import Dict, Any, List, Union, Optional
+from aiogram.enums import ParseMode
 
 
 logger = logging.getLogger(__name__)
+
+
+def get_parse_mode(mode_str: str) -> Optional[ParseMode]:
+    """
+    Convert string parse mode to ParseMode enum.
+    
+    Args:
+        mode_str: String representation ("Markdown", "HTML", "None", or None)
+        
+    Returns:
+        ParseMode enum value or None
+    """
+    if not mode_str or mode_str == "None":
+        return None
+    elif mode_str == "Markdown":
+        return ParseMode.MARKDOWN
+    elif mode_str == "HTML":
+        return ParseMode.HTML
+    else:
+        return None
 
 
 class MessageFormatter:
