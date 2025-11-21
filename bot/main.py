@@ -145,7 +145,7 @@ async def main() -> None:
         logger.info("Initializing bot and dispatcher...")
         bot = Bot(
             token=config.bot_token,
-            default=DefaultBotProperties(parse_mode=ParseMode.MARKDOWN)
+            default=DefaultBotProperties(parse_mode=ParseMode.MARKDOWN_V2)
         )
         
         dp = Dispatcher()
