@@ -519,7 +519,7 @@ def create_admin_router(config: Config) -> Router:
             # Format statistics
             formatted_stats = MessageFormatter.format_stats(stats)
             
-            await message.answer(formatted_stats, parse_mode=ParseMode.MARKDOWN_V2)
+            await message.answer(formatted_stats, parse_mode=ParseMode.MARKDOWN)
             
             logger.info(
                 "Statistics sent",
