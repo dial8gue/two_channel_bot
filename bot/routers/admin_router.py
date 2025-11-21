@@ -13,7 +13,8 @@ from bot.filters.admin_filter import IsAdminFilter
 from services.analysis_service import AnalysisService
 from services.admin_service import AdminService
 from services.message_service import MessageService
-from utils.message_formatter import MessageFormatter, get_parse_mode
+from utils.message_formatter import MessageFormatter
+from utils.telegram_sender import send_analysis_with_fallback
 from config.settings import Config
 
 
@@ -53,88 +54,15 @@ async def _perform_analysis_and_send(
         bypass_debounce=True  # Admin bypasses debounce
     )
     
-    # Format result
+    # Send result with fallback mechanism
     period_hours = hours or config.analysis_period_hours
-    formatted_result = MessageFormatter.format_analysis_result(
-        analysis=analysis_result,
+    await send_analysis_with_fallback(
+        send_func=lambda text, pm: bot.send_message(chat_id=target_chat_id, text=text, parse_mode=pm),
+        analysis_result=analysis_result,
         period_hours=period_hours,
         from_cache=from_cache,
-        parse_mode=config.default_parse_mode,
-        max_length=config.max_message_length
+        config=config
     )
-    
-    # Handle both single string and list return from formatter
-    if isinstance(formatted_result, str):
-        messages_to_send = [formatted_result]
-    else:
-        messages_to_send = formatted_result
-    
-    # Send message(s) with three-tier fallback: Markdown → HTML → Plain text
-    for idx, msg_text in enumerate(messages_to_send):
-        try:
-            # Tier 1: Try configured parse mode
-            parse_mode_enum = get_parse_mode(config.default_parse_mode)
-            await bot.send_message(
-                chat_id=target_chat_id,
-                text=msg_text,
-                parse_mode=parse_mode_enum
-            )
-            logger.debug(f"Message {idx + 1}/{len(messages_to_send)} sent successfully")
-            
-        except TelegramBadRequest as e:
-            if "can't parse entities" in str(e).lower():
-                # Tier 2: Fallback to HTML
-                logger.warning(f"Markdown parsing failed, trying HTML: {e}")
-                try:
-                    html_result = MessageFormatter.format_analysis_result(
-                        analysis=analysis_result,
-                        period_hours=period_hours,
-                        from_cache=from_cache,
-                        parse_mode="HTML",
-                        max_length=config.max_message_length
-                    )
-                    
-                    if isinstance(html_result, str):
-                        html_messages = [html_result]
-                    else:
-                        html_messages = html_result
-                    
-                    html_text = html_messages[idx] if idx < len(html_messages) else html_messages[0]
-                    
-                    await bot.send_message(
-                        chat_id=target_chat_id,
-                        text=html_text,
-                        parse_mode=ParseMode.HTML
-                    )
-                    logger.info("Message sent with HTML fallback")
-                    
-                except TelegramBadRequest as html_error:
-                    # Tier 3: Final fallback to plain text
-                    logger.error(f"HTML parsing also failed, using plain text: {html_error}")
-                    
-                    plain_result = MessageFormatter.format_analysis_result(
-                        analysis=analysis_result,
-                        period_hours=period_hours,
-                        from_cache=from_cache,
-                        parse_mode=None,
-                        max_length=config.max_message_length
-                    )
-                    
-                    if isinstance(plain_result, str):
-                        plain_messages = [plain_result]
-                    else:
-                        plain_messages = plain_result
-                    
-                    plain_text = plain_messages[idx] if idx < len(plain_messages) else plain_messages[0]
-                    
-                    await bot.send_message(
-                        chat_id=target_chat_id,
-                        text=plain_text,
-                        parse_mode=None
-                    )
-                    logger.info("Message sent with plain text fallback")
-            else:
-                raise
     
     logger.info(
         "Analysis completed and sent",

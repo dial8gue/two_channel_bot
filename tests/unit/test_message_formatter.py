@@ -509,8 +509,9 @@ class TestFormatAnalysisResult:
         # Should contain header with Markdown formatting
         assert "📊 *Анализ сообщений за последние 24 ч*" in result
         
-        # Should escape special characters in analysis content
-        assert "\\*special\\*" in result
+        # Should NOT escape special characters in analysis content
+        # (LLM already provides properly formatted Markdown)
+        assert "*special*" in result
         
         # Should contain footer with Markdown formatting
         assert "_Анализ выполнен роботами_" in result

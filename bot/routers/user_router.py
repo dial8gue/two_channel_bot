@@ -7,7 +7,7 @@ from aiogram.filters import Command
 from aiogram.enums import ChatType
 
 from services.analysis_service import AnalysisService
-from utils.message_formatter import MessageFormatter, get_parse_mode
+from utils.telegram_sender import send_analysis_with_fallback
 from config.settings import Config
 
 
@@ -74,27 +74,17 @@ def create_user_router(config: Config) -> Router:
                     bypass_debounce=is_admin
                 )
                 
-                # Format and send result
-                formatted_result = MessageFormatter.format_analysis_result(
-                    analysis=result,
-                    period_hours=config.anal_period_hours,
-                    from_cache=from_cache,
-                    parse_mode=config.default_parse_mode,
-                    max_length=config.max_message_length
-                )
-                
                 # Delete processing message
                 await processing_msg.delete()
                 
-                # Convert parse mode string to enum
-                parse_mode_enum = get_parse_mode(config.default_parse_mode)
-                
-                # Send result (handle both string and list)
-                if isinstance(formatted_result, str):
-                    await message.answer(formatted_result, parse_mode=parse_mode_enum)
-                else:
-                    for msg_text in formatted_result:
-                        await message.answer(msg_text, parse_mode=parse_mode_enum)
+                # Send result with fallback mechanism
+                await send_analysis_with_fallback(
+                    send_func=lambda text, pm: message.answer(text, parse_mode=pm),
+                    analysis_result=result,
+                    period_hours=config.anal_period_hours,
+                    from_cache=from_cache,
+                    config=config
+                )
                 
                 logger.info(
                     "/anal command completed",
@@ -188,27 +178,17 @@ def create_user_router(config: Config) -> Router:
                     bypass_debounce=is_admin
                 )
                 
-                # Format and send result
-                formatted_result = MessageFormatter.format_analysis_result(
-                    analysis=result,
-                    period_hours=config.deep_anal_period_hours,
-                    from_cache=from_cache,
-                    parse_mode=config.default_parse_mode,
-                    max_length=config.max_message_length
-                )
-                
                 # Delete processing message
                 await processing_msg.delete()
                 
-                # Convert parse mode string to enum
-                parse_mode_enum = get_parse_mode(config.default_parse_mode)
-                
-                # Send result (handle both string and list)
-                if isinstance(formatted_result, str):
-                    await message.answer(formatted_result, parse_mode=parse_mode_enum)
-                else:
-                    for msg_text in formatted_result:
-                        await message.answer(msg_text, parse_mode=parse_mode_enum)
+                # Send result with fallback mechanism
+                await send_analysis_with_fallback(
+                    send_func=lambda text, pm: message.answer(text, parse_mode=pm),
+                    analysis_result=result,
+                    period_hours=config.deep_anal_period_hours,
+                    from_cache=from_cache,
+                    config=config
+                )
                 
                 logger.info(
                     "/deep_anal command completed",
