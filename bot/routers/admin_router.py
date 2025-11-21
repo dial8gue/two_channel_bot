@@ -71,8 +71,7 @@ async def _perform_analysis_and_send(
             "period_hours": period_hours,
             "from_cache": from_cache,
             "target_chat_id": target_chat_id,
-            "chat_id_analyzed": chat_id_to_analyze,
-            "message_count": len(messages_to_send)
+            "chat_id_analyzed": chat_id_to_analyze
         }
     )
 
