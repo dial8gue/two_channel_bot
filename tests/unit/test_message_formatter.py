@@ -14,7 +14,7 @@ class TestGetParseMode:
     def test_markdown_string_to_enum(self):
         """Test converting 'Markdown' string to ParseMode.MARKDOWN enum."""
         result = get_parse_mode("Markdown")
-        assert result == ParseMode.MARKDOWN_V2
+        assert result == ParseMode.MARKDOWN
     
     def test_html_string_to_enum(self):
         """Test converting 'HTML' string to ParseMode.HTML enum."""

@@ -23,7 +23,7 @@ def get_parse_mode(mode_str: str) -> Optional[ParseMode]:
     if not mode_str or mode_str == "None":
         return None
     elif mode_str == "Markdown":
-        return ParseMode.MARKDOWN_V2
+        return ParseMode.MARKDOWN
     elif mode_str == "HTML":
         return ParseMode.HTML
     else:

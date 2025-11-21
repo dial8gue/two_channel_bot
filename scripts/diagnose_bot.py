@@ -81,7 +81,7 @@ async def main():
     try:
         bot = Bot(
             token=config.bot_token,
-            default=DefaultBotProperties(parse_mode=ParseMode.MARKDOWN_V2)
+            default=DefaultBotProperties(parse_mode=ParseMode.MARKDOWN)
         )
         
         dp = Dispatcher()
