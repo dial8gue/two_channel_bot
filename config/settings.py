@@ -1,9 +1,12 @@
 """Configuration module for loading and validating environment variables."""
 
 import os
+import logging
 from dataclasses import dataclass
 from typing import Optional
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -50,6 +53,9 @@ class Config:
     enable_markdown_escaping: bool
     max_message_length: int
     
+    # Timezone
+    timezone: Optional[str]
+    
     @classmethod
     def from_env(cls) -> "Config":
         """
@@ -87,6 +93,7 @@ class Config:
         default_parse_mode = os.getenv("DEFAULT_PARSE_MODE", "Markdown")
         enable_markdown_escaping = cls._get_bool_env("ENABLE_MARKDOWN_ESCAPING", default=True)
         max_message_length = cls._get_int_env("MAX_MESSAGE_LENGTH", default=4096)
+        timezone = cls._get_validated_timezone_env("TIMEZONE", default=None)
         
         # Validate positive values
         cls._validate_positive("MAX_TOKENS", max_tokens)
@@ -126,6 +133,7 @@ class Config:
             default_parse_mode=default_parse_mode,
             enable_markdown_escaping=enable_markdown_escaping,
             max_message_length=max_message_length,
+            timezone=timezone,
         )
     
     @staticmethod
@@ -221,3 +229,29 @@ class Config:
         """
         if value <= 0:
             raise ValueError(f"Parameter '{key}' must be positive, got: {value}")
+    
+    @staticmethod
+    def _get_validated_timezone_env(key: str, default: Optional[str]) -> Optional[str]:
+        """
+        Get and validate timezone environment variable.
+        
+        Args:
+            key: Environment variable name
+            default: Default value if not set
+            
+        Returns:
+            Optional[str]: Valid timezone identifier or None (UTC)
+            
+        Logs warning if invalid timezone provided.
+        """
+        value = os.getenv(key)
+        if value is None:
+            return default
+        
+        try:
+            import pytz
+            pytz.timezone(value)  # Validate timezone exists
+            return value
+        except pytz.exceptions.UnknownTimeZoneError:
+            logger.warning(f"Invalid timezone '{value}', defaulting to UTC")
+            return None

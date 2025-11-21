@@ -2,9 +2,10 @@
 OpenAI client for analyzing Telegram messages.
 """
 import logging
-from typing import List
+from typing import List, Optional
 from openai import AsyncOpenAI, APIError, RateLimitError, APIConnectionError
 from database.models import MessageModel
+from utils.timezone_helper import format_datetime
 
 
 logger = logging.getLogger(__name__)
@@ -13,7 +14,7 @@ logger = logging.getLogger(__name__)
 class OpenAIClient:
     """Client for interacting with OpenAI API to analyze messages."""
     
-    def __init__(self, api_key: str, base_url: str = None, model: str = "gpt-4o-mini", max_tokens: int = 4000):
+    def __init__(self, api_key: str, base_url: str = None, model: str = "gpt-4o-mini", max_tokens: int = 4000, timezone: Optional[str] = None):
         """
         Initialize OpenAI client.
         
@@ -22,6 +23,7 @@ class OpenAIClient:
             base_url: Optional base URL for API (defaults to OpenAI's endpoint)
             model: Model to use for analysis
             max_tokens: Maximum tokens for API requests
+            timezone: Optional IANA timezone identifier for timestamp formatting
         """
         client_kwargs = {"api_key": api_key}
         if base_url:
@@ -30,12 +32,14 @@ class OpenAIClient:
         self.client = AsyncOpenAI(**client_kwargs)
         self.model = model
         self.max_tokens = max_tokens
+        self.timezone = timezone
         logger.info(
             "OpenAI client initialized",
             extra={
                 "model": model,
                 "max_tokens": max_tokens,
-                "base_url": base_url or "default"
+                "base_url": base_url or "default",
+                "timezone": timezone or "UTC"
             }
         )
     
@@ -137,7 +141,7 @@ class OpenAIClient:
         # Build message list
         message_lines = []
         for msg in sorted_messages:
-            timestamp_str = msg.timestamp.strftime("%Y-%m-%d %H:%M:%S")
+            timestamp_str = format_datetime(msg.timestamp, self.timezone)
             reactions_str = ""
             
             if msg.reactions:

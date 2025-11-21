@@ -212,8 +212,8 @@ def create_admin_router(config: Config) -> Router:
             if message.text and len(message.text.split()) > 1:
                 try:
                     hours = int(message.text.split()[1])
-                    if hours <= 0:
-                        await message.answer("❌ Период должен быть положительным числом.")
+                    if hours <= 0 or hours > 24:
+                        await message.answer("❌ Период должен быть положительным числом от 1 до 24.")
                         return
                 except ValueError:
                     await message.answer("❌ Неверный формат. Используйте: /analyze [часы]")

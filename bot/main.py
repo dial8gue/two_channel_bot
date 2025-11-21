@@ -112,7 +112,8 @@ async def main() -> None:
             api_key=config.openai_api_key,
             base_url=config.openai_base_url,
             model=config.openai_model,
-            max_tokens=config.max_tokens
+            max_tokens=config.max_tokens,
+            timezone=config.timezone
         )
         
         # Create service instances
@@ -136,7 +137,8 @@ async def main() -> None:
         admin_service = AdminService(
             message_repository=message_repository,
             config_repository=config_repository,
-            cache_repository=cache_repository
+            cache_repository=cache_repository,
+            timezone=config.timezone
         )
         
         # Initialize bot and dispatcher

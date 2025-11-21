@@ -23,7 +23,8 @@ class AdminService:
         self,
         message_repository: MessageRepository,
         config_repository: ConfigRepository,
-        cache_repository: CacheRepository
+        cache_repository: CacheRepository,
+        timezone: Optional[str] = None
     ):
         """
         Initialize admin service.
@@ -32,10 +33,12 @@ class AdminService:
             message_repository: Repository for message operations
             config_repository: Repository for configuration operations
             cache_repository: Repository for cache operations
+            timezone: IANA timezone identifier for timestamp formatting (optional)
         """
         self.message_repository = message_repository
         self.config_repository = config_repository
         self.cache_repository = cache_repository
+        self.timezone = timezone
     
     async def clear_database(self) -> None:
         """
@@ -233,14 +236,20 @@ class AdminService:
                 # Get all messages to find oldest and newest
                 # This is not optimal for large datasets, but works for now
                 from datetime import timedelta
+                from utils.timezone_helper import format_datetime
+                
                 all_messages = await self.message_repository.get_by_period(
                     start_time=datetime.now() - timedelta(days=365 * 10)  # 10 years back
                 )
                 
                 if all_messages:
                     timestamps = [msg.timestamp for msg in all_messages]
-                    stats['oldest_message'] = min(timestamps).strftime("%Y-%m-%d %H:%M:%S")
-                    stats['newest_message'] = max(timestamps).strftime("%Y-%m-%d %H:%M:%S")
+                    oldest = min(timestamps)
+                    newest = max(timestamps)
+                    
+                    # Format with timezone
+                    stats['oldest_message'] = format_datetime(oldest, self.timezone)
+                    stats['newest_message'] = format_datetime(newest, self.timezone)
                 else:
                     stats['oldest_message'] = None
                     stats['newest_message'] = None

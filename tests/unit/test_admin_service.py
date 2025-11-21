@@ -3,8 +3,10 @@ Unit tests for AdminService.
 """
 import pytest
 from unittest.mock import AsyncMock
+from datetime import datetime
 
 from services.admin_service import AdminService
+from database.models import MessageModel
 
 
 @pytest.fixture
@@ -260,3 +262,111 @@ class TestAdminService:
         # Assert
         assert stats['total_messages'] == 10
         assert stats['cache_entries'] == "Error"
+    
+    @pytest.mark.asyncio
+    async def test_get_stats_formats_timestamps_with_timezone(
+        self,
+        mock_message_repository,
+        mock_config_repository,
+        mock_cache_repository
+    ):
+        """Test get_stats formats timestamps with configured timezone."""
+        # Arrange
+        admin_service = AdminService(
+            message_repository=mock_message_repository,
+            config_repository=mock_config_repository,
+            cache_repository=mock_cache_repository,
+            timezone="Europe/Moscow"
+        )
+        
+        # Create test messages with known UTC timestamps
+        test_messages = [
+            MessageModel(
+                message_id=1,
+                chat_id=-100123456789,
+                user_id=111,
+                username="user1",
+                text="First message",
+                timestamp=datetime(2024, 1, 15, 10, 0, 0),  # 10:00 UTC
+                reactions=None,
+                reply_to_message_id=None
+            ),
+            MessageModel(
+                message_id=2,
+                chat_id=-100123456789,
+                user_id=222,
+                username="user2",
+                text="Second message",
+                timestamp=datetime(2024, 1, 15, 14, 0, 0),  # 14:00 UTC
+                reactions=None,
+                reply_to_message_id=None
+            )
+        ]
+        
+        mock_message_repository.count.return_value = 2
+        mock_message_repository.get_by_period.return_value = test_messages
+        mock_cache_repository.count.return_value = 0
+        mock_config_repository.get.return_value = None
+        
+        # Act
+        stats = await admin_service.get_stats()
+        
+        # Assert
+        assert stats['total_messages'] == 2
+        # Moscow is UTC+3, so 10:00 UTC = 13:00 MSK, 14:00 UTC = 17:00 MSK
+        assert stats['oldest_message'] == "2024-01-15 13:00:00"
+        assert stats['newest_message'] == "2024-01-15 17:00:00"
+    
+    @pytest.mark.asyncio
+    async def test_get_stats_uses_utc_when_timezone_is_none(
+        self,
+        mock_message_repository,
+        mock_config_repository,
+        mock_cache_repository
+    ):
+        """Test get_stats uses UTC when timezone is None."""
+        # Arrange
+        admin_service = AdminService(
+            message_repository=mock_message_repository,
+            config_repository=mock_config_repository,
+            cache_repository=mock_cache_repository,
+            timezone=None
+        )
+        
+        # Create test messages with known UTC timestamps
+        test_messages = [
+            MessageModel(
+                message_id=1,
+                chat_id=-100123456789,
+                user_id=111,
+                username="user1",
+                text="First message",
+                timestamp=datetime(2024, 1, 15, 10, 0, 0),  # 10:00 UTC
+                reactions=None,
+                reply_to_message_id=None
+            ),
+            MessageModel(
+                message_id=2,
+                chat_id=-100123456789,
+                user_id=222,
+                username="user2",
+                text="Second message",
+                timestamp=datetime(2024, 1, 15, 14, 0, 0),  # 14:00 UTC
+                reactions=None,
+                reply_to_message_id=None
+            )
+        ]
+        
+        mock_message_repository.count.return_value = 2
+        mock_message_repository.get_by_period.return_value = test_messages
+        mock_cache_repository.count.return_value = 0
+        mock_config_repository.get.return_value = None
+        
+        # Act
+        stats = await admin_service.get_stats()
+        
+        # Assert
+        assert stats['total_messages'] == 2
+        # Should remain in UTC
+        assert stats['oldest_message'] == "2024-01-15 10:00:00"
+        assert stats['newest_message'] == "2024-01-15 14:00:00"
