@@ -51,11 +51,13 @@ class TestConfigTimezone:
             "ADMIN_ID": "123456",
             "OPENAI_API_KEY": "test_key"
         }, clear=True):
-            # Act
-            config = Config.from_env()
-            
-            # Assert
-            assert config.timezone is None
+            # Mock load_dotenv to prevent loading actual .env file
+            with patch('config.settings.load_dotenv'):
+                # Act
+                config = Config.from_env()
+                
+                # Assert
+                assert config.timezone is None
     
     def test_various_valid_timezones(self):
         """Test various valid IANA timezone identifiers."""

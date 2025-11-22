@@ -8,6 +8,7 @@ from aiogram.enums import ChatType
 
 from services.analysis_service import AnalysisService
 from utils.telegram_sender import send_analysis_with_fallback
+from utils.message_formatter import MessageFormatter
 from config.settings import Config
 
 
