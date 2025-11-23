@@ -99,7 +99,7 @@ def create_user_router(config: Config) -> Router:
             except ValueError as e:
                 # Handle debounce rejection
                 error_msg = str(e)
-                
+                logger.error(f"!!! {error_msg}")
                 # Extract remaining seconds from error message
                 # Expected format: just a number (seconds as string)
                 try:
