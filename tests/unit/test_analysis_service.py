@@ -134,15 +134,29 @@ class TestAnalysisService:
     async def test_analyze_messages_debounced(
         self,
         analysis_service,
+        mock_message_repository,
+        mock_cache_manager,
         mock_debounce_manager
     ):
-        """Test analysis is blocked by debounce."""
+        """Test analysis is blocked by debounce when no cache available."""
         # Arrange
+        # Setup messages but no cache
+        mock_message_repository.get_by_period.return_value = [
+            MessageModel(
+                message_id=1,
+                chat_id=0,
+                user_id=1,
+                username="user1",
+                text="test",
+                timestamp=datetime.now(),
+                reactions={}
+            )
+        ]
+        mock_cache_manager.get.return_value = None  # No cache
         mock_debounce_manager.can_execute.return_value = (False, 150.0)
-        mock_debounce_manager.get_remaining_time.return_value = 150.0
         
         # Act & Assert
-        with pytest.raises(ValueError, match="Анализ был выполнен недавно"):
+        with pytest.raises(ValueError, match="150"):
             await analysis_service.analyze_messages()
     
     @pytest.mark.asyncio
