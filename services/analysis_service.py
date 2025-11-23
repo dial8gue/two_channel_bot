@@ -99,7 +99,28 @@ class AnalysisService:
                 }
             )
             
-            # Check debounce unless bypassed
+            # First, check if we have a cached result
+            # We need to get messages to generate cache key
+            start_time = datetime.now() - timedelta(hours=hours)
+            messages = await self.message_repository.get_by_period(
+                start_time=start_time,
+                chat_id=chat_id
+            )
+            
+            if not messages:
+                logger.warning("No messages found for analysis period")
+                return "Нет сообщений для анализа за указанный период.", False
+            
+            # Generate cache key and check cache
+            cache_key = self._generate_cache_key(messages)
+            cached_result = await self.cache_manager.get(cache_key)
+            
+            if cached_result:
+                # Return cached result without debounce check/set
+                logger.info("Returning cached analysis result (no debounce applied)")
+                return cached_result, True
+            
+            # No cache hit - check and set debounce before making API call
             if not bypass_debounce:
                 can_execute, remaining = await self.debounce_manager.can_execute(
                     operation=operation_key,
@@ -116,33 +137,40 @@ class AnalysisService:
                         }
                     )
                     raise ValueError(f"{remaining}")
+                
+                # Mark operation as executed IMMEDIATELY after check passes
+                # This prevents concurrent requests from bypassing debounce
+                await self.debounce_manager.mark_executed(operation_key)
+                logger.debug(
+                    f"Marked operation as executed for debounce (before API call)",
+                    extra={"operation_key": operation_key}
+                )
             else:
                 logger.debug(
                     "Bypassing debounce check",
                     extra={"user_id": user_id, "operation_key": operation_key}
                 )
             
-            # Call existing analyze_messages method for actual analysis
-            # Note: We pass chat_id to filter messages for this specific chat
-            analysis_result, from_cache = await self._analyze_without_debounce(
-                hours=hours,
-                chat_id=chat_id
+            # Perform new analysis with OpenAI
+            logger.info("Performing new analysis with OpenAI")
+            analysis_result = await self.openai_client.analyze_messages(messages)
+            
+            # Cache the result
+            await self.cache_manager.set(
+                key=cache_key,
+                value=analysis_result,
+                ttl_minutes=self.cache_ttl_minutes
             )
             
-            # Mark operation as executed for debounce (only if not from cache)
-            if not from_cache and not bypass_debounce:
-                await self.debounce_manager.mark_executed(operation_key)
-                logger.debug(
-                    f"Marked operation as executed for debounce",
-                    extra={"operation_key": operation_key}
-                )
+            from_cache = False
             
             logger.info(
                 "Chat-level debounced analysis completed",
                 extra={
                     "operation_key": operation_key,
                     "user_id": user_id,
-                    "from_cache": from_cache
+                    "from_cache": from_cache,
+                    "message_count": len(messages)
                 }
             )
             
