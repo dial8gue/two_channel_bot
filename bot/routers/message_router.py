@@ -19,7 +19,8 @@ router = Router(name="message_router")
 
 @router.message(
     lambda message: message.chat.type in [ChatType.GROUP, ChatType.SUPERGROUP],
-    lambda message: not message.text or not message.text.startswith('/')
+    lambda message: not message.text or not message.text.startswith('/'),
+    lambda message: message.from_user and not message.from_user.is_bot
 )
 async def handle_group_message(message: Message, message_service: MessageService):
     """
