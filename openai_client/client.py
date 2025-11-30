@@ -161,28 +161,20 @@ class OpenAIClient:
             
             if msg.reactions:
                 reactions_list = [f"{emoji}: {count}" for emoji, count in msg.reactions.items()]
-                reactions_str = f"\n  Реакции: {', '.join(reactions_list)}"
+                reactions_str = f" [Реакции: {', '.join(reactions_list)}]"
             
             reply_str = ""
             # if msg.reply_to_message_id:
             #     reply_str = f" [Ответ на сообщение #{msg.reply_to_message_id}]"
             
             message_lines.append(
-                f"Время: {timestamp_str}\nАвтор: @{msg.username}\nТекст: {msg.text}{reactions_str}{reply_str}\n"
+                f"[{timestamp_str}] @{msg.username}: {msg.text}{reactions_str}{reply_str}"
             )
         
         messages_text = "\n".join(message_lines)
         
         # Build complete prompt
         prompt = f"""Проанализируй следующие сообщения из группового чата и предоставь краткую сводку.
-
-ВАЖНО: Каждое сообщение имеет структуру:
-- Время: когда было отправлено
-- Автор: кто написал (username с @)
-- Текст: содержимое сообщения
-- Реакции (если есть): эмодзи и количество
-
-Автор (@username) - это метаданные, НЕ часть текста беседы. Анализируй только содержимое поля "Текст".
 
 СООБЩЕНИЯ:
 {messages_text}
