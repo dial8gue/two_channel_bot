@@ -140,6 +140,44 @@ class MessageRepository:
             await conn.rollback()
             raise
     
+    async def get_reactions(self, message_id: int, chat_id: int) -> dict:
+        """
+        Get reactions for a specific message.
+        
+        Args:
+            message_id: Telegram message ID
+            chat_id: Telegram chat ID
+            
+        Returns:
+            Dictionary of reactions {emoji: count} or empty dict if not found
+        """
+        conn = await self.db_connection.get_connection()
+        
+        try:
+            cursor = await conn.execute(
+                """
+                SELECT reactions FROM messages 
+                WHERE message_id = ? AND chat_id = ?
+                """,
+                (message_id, chat_id)
+            )
+            row = await cursor.fetchone()
+            
+            if row and row['reactions']:
+                return MessageModel.reactions_from_json(row['reactions'])
+            return {}
+            
+        except Exception as e:
+            logger.error(
+                f"Failed to get reactions: {e}",
+                extra={
+                    "message_id": message_id,
+                    "chat_id": chat_id
+                },
+                exc_info=True
+            )
+            return {}
+    
     async def get_by_period(self, start_time: datetime, chat_id: Optional[int] = None) -> List[MessageModel]:
         """
         Get messages from a specific time period.

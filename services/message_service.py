@@ -143,6 +143,38 @@ class MessageService:
             )
             raise
     
+    async def get_reactions(
+        self,
+        message_id: int,
+        chat_id: int
+    ) -> dict:
+        """
+        Get current reactions for a specific message.
+        
+        Args:
+            message_id: Telegram message ID
+            chat_id: Telegram chat ID
+            
+        Returns:
+            Dictionary of reactions {emoji: count}
+        """
+        try:
+            return await self.message_repository.get_reactions(
+                message_id=message_id,
+                chat_id=chat_id
+            )
+            
+        except Exception as e:
+            logger.error(
+                f"Failed to update reactions: {e}",
+                extra={
+                    "message_id": message_id,
+                    "chat_id": chat_id
+                },
+                exc_info=True
+            )
+            raise
+    
     async def get_messages_by_period(
         self,
         hours: int,

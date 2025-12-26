@@ -33,24 +33,49 @@ async def handle_reaction(reaction_update: MessageReactionUpdated, message_servi
         message_id = reaction_update.message_id
         chat_id = reaction_update.chat.id
         
-        # Process new reactions
-        reactions: Dict[str, int] = {}
+        # Get user's old and new reactions
+        old_emojis = set()
+        new_emojis = set()
+        
+        if reaction_update.old_reaction:
+            for reaction in reaction_update.old_reaction:
+                if isinstance(reaction, ReactionTypeEmoji):
+                    old_emojis.add(reaction.emoji)
         
         if reaction_update.new_reaction:
             for reaction in reaction_update.new_reaction:
-                # Handle emoji reactions
                 if isinstance(reaction, ReactionTypeEmoji):
-                    emoji = reaction.emoji
-                    # Count reactions (simplified - just mark as 1)
-                    # In a real scenario, we'd need to track all users' reactions
-                    reactions[emoji] = reactions.get(emoji, 0) + 1
+                    new_emojis.add(reaction.emoji)
+        
+        # Calculate what was added and removed by this user
+        added_emojis = new_emojis - old_emojis
+        removed_emojis = old_emojis - new_emojis
+        
+        # Get current reactions from database
+        reactions = await message_service.get_reactions(
+            message_id=message_id,
+            chat_id=chat_id
+        )
+        
+        # Apply changes: increment for added, decrement for removed
+        for emoji in added_emojis:
+            reactions[emoji] = reactions.get(emoji, 0) + 1
+        
+        for emoji in removed_emojis:
+            current_count = reactions.get(emoji, 0)
+            if current_count > 1:
+                reactions[emoji] = current_count - 1
+            elif emoji in reactions:
+                del reactions[emoji]  # Remove if count becomes 0
         
         logger.debug(
             "Processing reaction update",
             extra={
                 "message_id": message_id,
                 "chat_id": chat_id,
-                "reaction_count": len(reactions)
+                "added": list(added_emojis),
+                "removed": list(removed_emojis),
+                "total_reactions": len(reactions)
             }
         )
         
