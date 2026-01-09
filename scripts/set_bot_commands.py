@@ -39,7 +39,7 @@ async def set_commands():
         group_commands = [
             BotCommand(command="anal", description="Анализ сообщений (6 часов)"),
             BotCommand(command="deep_anal", description="Глубокий анализ (12 часов)"),
-            BotCommand(command="horoscope", description="Гороскоп на основе ваших сообщений"),
+            BotCommand(command="horoscope", description="Гороскоп на основе сообщений"),
         ]
         
         await bot.set_my_commands(
