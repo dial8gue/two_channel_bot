@@ -246,6 +246,76 @@ class MessageRepository:
             )
             raise
     
+    async def get_by_user_and_period(self, user_id: int, start_time: datetime, chat_id: Optional[int] = None) -> List[MessageModel]:
+        """
+        Get messages from a specific user within a time period.
+        
+        Args:
+            user_id: User ID to filter by
+            start_time: Start of the time period
+            chat_id: Optional chat ID to filter by
+            
+        Returns:
+            List of message models from the specified user
+        """
+        conn = await self.db_connection.get_connection()
+        
+        try:
+            if chat_id:
+                cursor = await conn.execute(
+                    """
+                    SELECT id, message_id, chat_id, user_id, username, text, 
+                           timestamp, reactions, reply_to_message_id
+                    FROM messages
+                    WHERE timestamp >= ? AND user_id = ? AND chat_id = ?
+                    ORDER BY timestamp ASC
+                    """,
+                    (start_time, user_id, chat_id)
+                )
+            else:
+                cursor = await conn.execute(
+                    """
+                    SELECT id, message_id, chat_id, user_id, username, text, 
+                           timestamp, reactions, reply_to_message_id
+                    FROM messages
+                    WHERE timestamp >= ? AND user_id = ?
+                    ORDER BY timestamp ASC
+                    """,
+                    (start_time, user_id)
+                )
+            
+            rows = await cursor.fetchall()
+            messages = []
+            
+            for row in rows:
+                message = MessageModel(
+                    id=row['id'],
+                    message_id=row['message_id'],
+                    chat_id=row['chat_id'],
+                    user_id=row['user_id'],
+                    username=row['username'],
+                    text=row['text'],
+                    timestamp=datetime.fromisoformat(row['timestamp']),
+                    reactions=MessageModel.reactions_from_json(row['reactions']),
+                    reply_to_message_id=row['reply_to_message_id']
+                )
+                messages.append(message)
+            
+            logger.debug(f"Retrieved {len(messages)} messages from user {user_id} for period")
+            return messages
+            
+        except Exception as e:
+            logger.error(
+                f"Failed to get messages by user and period: {e}",
+                extra={
+                    "user_id": user_id,
+                    "start_time": start_time.isoformat(),
+                    "chat_id": chat_id
+                },
+                exc_info=True
+            )
+            raise
+    
     async def delete_older_than(self, timestamp: datetime) -> int:
         """
         Delete messages older than specified timestamp.

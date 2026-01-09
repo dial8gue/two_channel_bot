@@ -39,6 +39,7 @@ async def set_commands():
         group_commands = [
             BotCommand(command="anal", description="Анализ сообщений (6 часов)"),
             BotCommand(command="deep_anal", description="Глубокий анализ (12 часов)"),
+            BotCommand(command="horoscope", description="Гороскоп на основе ваших сообщений"),
         ]
         
         await bot.set_my_commands(
@@ -50,6 +51,7 @@ async def set_commands():
         # Commands for all private chats (admin will see these in private chat with bot)
         private_commands = [
             BotCommand(command="analyze", description="Анализ сообщений"),
+            BotCommand(command="horoscope", description="Создать гороскоп для пользователя"),
             BotCommand(command="stats", description="Статистика базы данных"),
             BotCommand(command="clear_db", description="Очистить базу данных"),
             BotCommand(command="set_storage", description="Установить период хранения"),
