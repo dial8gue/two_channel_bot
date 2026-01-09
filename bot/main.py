@@ -113,6 +113,7 @@ async def main() -> None:
             base_url=config.openai_base_url,
             model=config.openai_model,
             max_tokens=config.max_tokens,
+            horoscope_max_tokens=config.horoscope_max_tokens,
             timezone=config.timezone
         )
         

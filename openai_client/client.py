@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 class OpenAIClient:
     """Client for interacting with OpenAI API to analyze messages."""
     
-    def __init__(self, api_key: str, base_url: str = None, model: str = "gpt-4o-mini", max_tokens: int = 4000, timezone: Optional[str] = None):
+    def __init__(self, api_key: str, base_url: str = None, model: str = "gpt-4o-mini", max_tokens: int = 4000, horoscope_max_tokens: int = 2000, timezone: Optional[str] = None):
         """
         Initialize OpenAI client.
         
@@ -22,7 +22,8 @@ class OpenAIClient:
             api_key: OpenAI API key
             base_url: Optional base URL for API (defaults to OpenAI's endpoint)
             model: Model to use for analysis
-            max_tokens: Maximum tokens for API requests
+            max_tokens: Maximum tokens for API requests (analysis)
+            horoscope_max_tokens: Maximum tokens for horoscope requests
             timezone: Optional IANA timezone identifier for timestamp formatting
         """
         client_kwargs = {"api_key": api_key}
@@ -32,12 +33,14 @@ class OpenAIClient:
         self.client = AsyncOpenAI(**client_kwargs)
         self.model = model
         self.max_tokens = max_tokens
+        self.horoscope_max_tokens = horoscope_max_tokens
         self.timezone = timezone
         logger.info(
             "OpenAI client initialized",
             extra={
                 "model": model,
                 "max_tokens": max_tokens,
+                "horoscope_max_tokens": horoscope_max_tokens,
                 "base_url": base_url or "default",
                 "timezone": timezone or "UTC"
             }
@@ -199,7 +202,7 @@ class OpenAIClient:
                         "content": prompt
                     }
                 ],
-                max_tokens=self.max_tokens,
+                max_tokens=self.horoscope_max_tokens,
                 temperature=0.8  # Более высокая температура для креативности
             )
             
@@ -353,8 +356,6 @@ class OpenAIClient:
 
 ФОРМАТ ОТВЕТА (СТРОГО соблюдай каждую деталь):
 
-*🔮 Гороскоп для @{escaped_username}*
-
 *⭐ Анализ твоего кринжа*
 - Разбери стиль общения пользователя в максимально токсичном ключе
 - Определи его "астрологический тип" используя имиджбордовские мемы (например: "Знак Анона", "Восходящий Шизик", "Луна в доме Аутизма")
@@ -384,6 +385,6 @@ class OpenAIClient:
 
 СТИЛЬ: Будь максимально токсичным, используй имиджбордовский слэнг, мемы, мат. Не стесняйся грубых выражений и едких шуток. Гороскоп должен быть персональным, основанным на реальных сообщениях, но при этом максимально кринжовым и на грани. Представь, что ты анон с /b/, который решил потроллить пользователя.
 
-НАЧНИ ОТВЕТ СРАЗУ С ЗАГОЛОВКА (*🔮 Гороскоп для @{escaped_username}*). НЕ ДОБАВЛЯЙ ВСТУПЛЕНИЙ."""
+НЕ ДОБАВЛЯЙ ВСТУПЛЕНИЙ."""
         return prompt
 

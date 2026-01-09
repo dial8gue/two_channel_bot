@@ -23,6 +23,7 @@ class Config:
     openai_base_url: Optional[str]
     openai_model: str
     max_tokens: int
+    horoscope_max_tokens: int
     
     # Database
     db_path: str
@@ -80,6 +81,7 @@ class Config:
         openai_base_url = os.getenv("OPENAI_BASE_URL")  # Optional, defaults to OpenAI's endpoint
         openai_model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
         max_tokens = cls._get_int_env("MAX_TOKENS", default=4000)
+        horoscope_max_tokens = cls._get_int_env("HOROSCOPE_MAX_TOKENS", default=2000)
         db_path = os.getenv("DB_PATH", "/app/data/bot.db")
         storage_period_hours = cls._get_int_env("STORAGE_PERIOD_HOURS", default=168)  # 7 days
         analysis_period_hours = cls._get_int_env("ANALYSIS_PERIOD_HOURS", default=24)
@@ -97,6 +99,7 @@ class Config:
         
         # Validate positive values
         cls._validate_positive("MAX_TOKENS", max_tokens)
+        cls._validate_positive("HOROSCOPE_MAX_TOKENS", horoscope_max_tokens)
         cls._validate_positive("STORAGE_PERIOD_HOURS", storage_period_hours)
         cls._validate_positive("ANALYSIS_PERIOD_HOURS", analysis_period_hours)
         cls._validate_positive("ANAL_PERIOD_HOURS", anal_period_hours)
@@ -120,6 +123,7 @@ class Config:
             openai_base_url=openai_base_url,
             openai_model=openai_model,
             max_tokens=max_tokens,
+            horoscope_max_tokens=horoscope_max_tokens,
             db_path=db_path,
             storage_period_hours=storage_period_hours,
             analysis_period_hours=analysis_period_hours,

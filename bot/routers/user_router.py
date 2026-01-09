@@ -296,7 +296,8 @@ def create_user_router(config: Config) -> Router:
                     horoscope_result=result,
                     period_hours=12,
                     from_cache=from_cache,
-                    config=config
+                    config=config,
+                    username=username
                 )
                 
                 logger.info(

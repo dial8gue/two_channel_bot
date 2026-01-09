@@ -134,7 +134,8 @@ async def send_horoscope_with_fallback(
     horoscope_result: str,
     period_hours: int,
     from_cache: bool,
-    config: Config
+    config: Config,
+    username: str = None
 ):
     """
     Send horoscope result with three-tier fallback: Markdown → HTML → Plain text.
@@ -151,6 +152,7 @@ async def send_horoscope_with_fallback(
         period_hours: Analysis period in hours
         from_cache: Whether result is from cache
         config: Bot configuration
+        username: Username for horoscope header
     """
     # Format result with configured parse mode
     formatted_result = MessageFormatter.format_analysis_result(
@@ -159,7 +161,8 @@ async def send_horoscope_with_fallback(
         from_cache=from_cache,
         parse_mode=config.default_parse_mode,
         max_length=config.max_message_length,
-        analysis_type="horoscope"
+        analysis_type="horoscope",
+        username=username
     )
     
     # Handle both single string and list return from formatter
@@ -187,7 +190,8 @@ async def send_horoscope_with_fallback(
                         from_cache=from_cache,
                         parse_mode="HTML",
                         max_length=config.max_message_length,
-                        analysis_type="horoscope"
+                        analysis_type="horoscope",
+                        username=username
                     )
                     
                     if isinstance(html_result, str):
@@ -210,7 +214,8 @@ async def send_horoscope_with_fallback(
                         from_cache=from_cache,
                         parse_mode=None,
                         max_length=config.max_message_length,
-                        analysis_type="horoscope"
+                        analysis_type="horoscope",
+                        username=username
                     )
                     
                     if isinstance(plain_result, str):

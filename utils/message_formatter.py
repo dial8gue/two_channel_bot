@@ -225,7 +225,8 @@ class MessageFormatter:
         from_cache: bool = False,
         parse_mode: str = "Markdown",
         max_length: int = 4096,
-        analysis_type: str = "analysis"
+        analysis_type: str = "analysis",
+        username: str = None
     ) -> Union[str, List[str]]:
         """
         Format analysis result with robust error handling.
@@ -241,6 +242,7 @@ class MessageFormatter:
             parse_mode: Preferred parse mode ("Markdown", "HTML", or None)
             max_length: Maximum message length (default 4096)
             analysis_type: Type of analysis ("analysis" or "horoscope")
+            username: Username for horoscope header (only used for horoscope type)
             
         Returns:
             Formatted message(s) - single string or list if split needed
@@ -248,12 +250,24 @@ class MessageFormatter:
         try:
             # Create header with period information (with intentional formatting)
             if analysis_type == "horoscope":
-                if parse_mode == "Markdown":
-                    header = f"🔮 *Гороскоп по сообщениям за {period_hours} ч*\n\n"
-                elif parse_mode == "HTML":
-                    header = f"🔮 <b>Гороскоп по сообщениям за {period_hours} ч</b>\n\n"
+                # Escape username for different parse modes
+                if username:
+                    if parse_mode == "Markdown":
+                        escaped_username = username.replace('_', r'\_')
+                        header = f"🔮 *Гороскоп для @{escaped_username}*\n\n"
+                    elif parse_mode == "HTML":
+                        escaped_username = username.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+                        header = f"🔮 <b>Гороскоп для @{escaped_username}</b>\n\n"
+                    else:
+                        header = f"� Гороскоп для @{username}\n\n"
                 else:
-                    header = f"🔮 Гороскоп по сообщениям за {period_hours} ч\n\n"
+                    # Fallback if no username provided
+                    if parse_mode == "Markdown":
+                        header = f"� *Гороскоп по сообщениям за {period_hours} ч*\n\n"
+                    elif parse_mode == "HTML":
+                        header = f"🔮 <b>Гороскоп по сообщениям за {period_hours} ч</b>\n\n"
+                    else:
+                        header = f"🔮 Гороскоп по сообщениям за {period_hours} ч\n\n"
             else:
                 if parse_mode == "Markdown":
                     header = f"📊 *Анализ сообщений за последние {period_hours} ч*\n\n"
@@ -329,7 +343,10 @@ class MessageFormatter:
             try:
                 # Strip all formatting and create a simple plain text message
                 if analysis_type == "horoscope":
-                    plain_header = f"🔮 Гороскоп на основе сообщений за {period_hours} ч\n\n"
+                    if username:
+                        plain_header = f"🔮 Гороскоп для @{username}\n\n"
+                    else:
+                        plain_header = f"� Гороскоп на основе сообщений за {period_hours} ч\n\n"
                     plain_footer = "\n\nГороскоп составлен роботами (из кеша)" if from_cache else "\n\nГороскоп составлен роботами"
                 else:
                     plain_header = f"📊 Анализ сообщений за последние {period_hours} ч\n\n"
@@ -352,7 +369,10 @@ class MessageFormatter:
                 # Use max_length - 96 to leave room for header
                 safe_length = max_length - 96
                 if analysis_type == "horoscope":
-                    return f"🔮 Гороскоп за {period_hours} ч\n\n{analysis[:safe_length]}"
+                    if username:
+                        return f"🔮 Гороскоп для @{username}\n\n{analysis[:safe_length]}"
+                    else:
+                        return f"� Гороскоп за {period_hours} ч\n\n{analysis[:safe_length]}"
                 else:
                     return f"📊 Анализ за {period_hours} ч\n\n{analysis[:safe_length]}"
     

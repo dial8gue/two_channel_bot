@@ -51,6 +51,7 @@ OPENAI_API_KEY=your_openai_key_here
 OPENAI_BASE_URL=https://api.openai.com/v1
 OPENAI_MODEL=gpt-4o-mini
 MAX_TOKENS=4000
+HOROSCOPE_MAX_TOKENS=2000
 
 # Database
 DB_PATH=/app/data/bot.db
@@ -160,7 +161,8 @@ python -m bot.main
 |------------|----------|--------------|
 | `OPENAI_BASE_URL` | Базовый URL для OpenAI API | `https://api.openai.com/v1` |
 | `OPENAI_MODEL` | Модель для анализа | `gpt-4o-mini` |
-| `MAX_TOKENS` | Максимальное количество токенов для запроса | `4000` |
+| `MAX_TOKENS` | Максимальное количество токенов для анализа | `4000` |
+| `HOROSCOPE_MAX_TOKENS` | Максимальное количество токенов для гороскопов | `2000` |
 
 ### База данных
 

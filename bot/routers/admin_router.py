@@ -635,7 +635,8 @@ def create_admin_router(config: Config) -> Router:
                         horoscope_result=horoscope_result,
                         period_hours=12,
                         from_cache=from_cache,
-                        config=config
+                        config=config,
+                        username=actual_username
                     )
                     
                 except Exception as e:
@@ -855,7 +856,8 @@ def create_admin_router(config: Config) -> Router:
                     horoscope_result=horoscope_result,
                     period_hours=12,
                     from_cache=from_cache,
-                    config=config
+                    config=config,
+                    username=username
                 )
                 
                 # Delete the selection message
