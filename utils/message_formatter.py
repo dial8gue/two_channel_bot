@@ -253,17 +253,16 @@ class MessageFormatter:
                 # Escape username for different parse modes
                 if username:
                     if parse_mode == "Markdown":
-                        escaped_username = username.replace('_', r'\_')
-                        header = f"🔮 *Гороскоп для @{escaped_username}*\n\n"
+                        header = f"🔮 *Гороскоп для @{username}*\n\n"
                     elif parse_mode == "HTML":
                         escaped_username = username.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
                         header = f"🔮 <b>Гороскоп для @{escaped_username}</b>\n\n"
                     else:
-                        header = f"� Гороскоп для @{username}\n\n"
+                        header = f"🔮 Гороскоп для @{username}\n\n"
                 else:
                     # Fallback if no username provided
                     if parse_mode == "Markdown":
-                        header = f"� *Гороскоп по сообщениям за {period_hours} ч*\n\n"
+                        header = f"🔮 *Гороскоп по сообщениям за {period_hours} ч*\n\n"
                     elif parse_mode == "HTML":
                         header = f"🔮 <b>Гороскоп по сообщениям за {period_hours} ч</b>\n\n"
                     else:
@@ -346,7 +345,7 @@ class MessageFormatter:
                     if username:
                         plain_header = f"🔮 Гороскоп для @{username}\n\n"
                     else:
-                        plain_header = f"� Гороскоп на основе сообщений за {period_hours} ч\n\n"
+                        plain_header = f"🔮 Гороскоп на основе сообщений за {period_hours} ч\n\n"
                     plain_footer = "\n\nГороскоп составлен роботами (из кеша)" if from_cache else "\n\nГороскоп составлен роботами"
                 else:
                     plain_header = f"📊 Анализ сообщений за последние {period_hours} ч\n\n"
@@ -372,7 +371,7 @@ class MessageFormatter:
                     if username:
                         return f"🔮 Гороскоп для @{username}\n\n{analysis[:safe_length]}"
                     else:
-                        return f"� Гороскоп за {period_hours} ч\n\n{analysis[:safe_length]}"
+                        return f"🔮 Гороскоп за {period_hours} ч\n\n{analysis[:safe_length]}"
                 else:
                     return f"📊 Анализ за {period_hours} ч\n\n{analysis[:safe_length]}"
     
