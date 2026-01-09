@@ -249,11 +249,11 @@ class MessageFormatter:
             # Create header with period information (with intentional formatting)
             if analysis_type == "horoscope":
                 if parse_mode == "Markdown":
-                    header = f"🔮 *Гороскоп на основе сообщений за {period_hours} ч*\n\n"
+                    header = f"🔮 *Гороскоп по сообщениям за {period_hours} ч*\n\n"
                 elif parse_mode == "HTML":
-                    header = f"🔮 <b>Гороскоп на основе сообщений за {period_hours} ч</b>\n\n"
+                    header = f"🔮 <b>Гороскоп по сообщениям за {period_hours} ч</b>\n\n"
                 else:
-                    header = f"🔮 Гороскоп на основе сообщений за {period_hours} ч\n\n"
+                    header = f"🔮 Гороскоп по сообщениям за {period_hours} ч\n\n"
             else:
                 if parse_mode == "Markdown":
                     header = f"📊 *Анализ сообщений за последние {period_hours} ч*\n\n"
