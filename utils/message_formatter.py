@@ -224,7 +224,8 @@ class MessageFormatter:
         period_hours: int, 
         from_cache: bool = False,
         parse_mode: str = "Markdown",
-        max_length: int = 4096
+        max_length: int = 4096,
+        analysis_type: str = "analysis"
     ) -> Union[str, List[str]]:
         """
         Format analysis result with robust error handling.
@@ -239,18 +240,27 @@ class MessageFormatter:
             from_cache: Whether the result was retrieved from cache
             parse_mode: Preferred parse mode ("Markdown", "HTML", or None)
             max_length: Maximum message length (default 4096)
+            analysis_type: Type of analysis ("analysis" or "horoscope")
             
         Returns:
             Formatted message(s) - single string or list if split needed
         """
         try:
             # Create header with period information (with intentional formatting)
-            if parse_mode == "Markdown":
-                header = f"📊 *Анализ сообщений за последние {period_hours} ч*\n\n"
-            elif parse_mode == "HTML":
-                header = f"📊 <b>Анализ сообщений за последние {period_hours} ч</b>\n\n"
+            if analysis_type == "horoscope":
+                if parse_mode == "Markdown":
+                    header = f"🔮 *Гороскоп на основе сообщений за {period_hours} ч*\n\n"
+                elif parse_mode == "HTML":
+                    header = f"🔮 <b>Гороскоп на основе сообщений за {period_hours} ч</b>\n\n"
+                else:
+                    header = f"🔮 Гороскоп на основе сообщений за {period_hours} ч\n\n"
             else:
-                header = f"📊 Анализ сообщений за последние {period_hours} ч\n\n"
+                if parse_mode == "Markdown":
+                    header = f"📊 *Анализ сообщений за последние {period_hours} ч*\n\n"
+                elif parse_mode == "HTML":
+                    header = f"📊 <b>Анализ сообщений за последние {period_hours} ч</b>\n\n"
+                else:
+                    header = f"📊 Анализ сообщений за последние {period_hours} ч\n\n"
             
             # Apply appropriate escaping function based on parse_mode
             formatted_analysis = analysis.strip()
@@ -266,21 +276,38 @@ class MessageFormatter:
                 formatted_analysis = MessageFormatter.strip_formatting(formatted_analysis)
             
             # Add footer (with intentional formatting preserved)
-            if parse_mode == "Markdown":
-                if from_cache:
-                    footer = "\n\n_Анализ выполнен роботами (из кеша)_"
+            if analysis_type == "horoscope":
+                if parse_mode == "Markdown":
+                    if from_cache:
+                        footer = "\n\n_Гороскоп составлен роботами (из кеша)_"
+                    else:
+                        footer = "\n\n_Гороскоп составлен роботами_"
+                elif parse_mode == "HTML":
+                    if from_cache:
+                        footer = "\n\n<i>Гороскоп составлен роботами (из кеша)</i>"
+                    else:
+                        footer = "\n\n<i>Гороскоп составлен роботами</i>"
                 else:
-                    footer = "\n\n_Анализ выполнен роботами_"
-            elif parse_mode == "HTML":
-                if from_cache:
-                    footer = "\n\n<i>Анализ выполнен роботами (из кеша)</i>"
-                else:
-                    footer = "\n\n<i>Анализ выполнен роботами</i>"
+                    if from_cache:
+                        footer = "\n\nГороскоп составлен роботами (из кеша)"
+                    else:
+                        footer = "\n\nГороскоп составлен роботами"
             else:
-                if from_cache:
-                    footer = "\n\nАнализ выполнен роботами (из кеша)"
+                if parse_mode == "Markdown":
+                    if from_cache:
+                        footer = "\n\n_Анализ выполнен роботами (из кеша)_"
+                    else:
+                        footer = "\n\n_Анализ выполнен роботами_"
+                elif parse_mode == "HTML":
+                    if from_cache:
+                        footer = "\n\n<i>Анализ выполнен роботами (из кеша)</i>"
+                    else:
+                        footer = "\n\n<i>Анализ выполнен роботами</i>"
                 else:
-                    footer = "\n\nАнализ выполнен роботами"
+                    if from_cache:
+                        footer = "\n\nАнализ выполнен роботами (из кеша)"
+                    else:
+                        footer = "\n\nАнализ выполнен роботами"
             
             result = header + formatted_analysis + footer
             
@@ -301,10 +328,14 @@ class MessageFormatter:
             
             try:
                 # Strip all formatting and create a simple plain text message
-                plain_header = f"📊 Анализ сообщений за последние {period_hours} ч\n\n"
-                plain_analysis = MessageFormatter.strip_formatting(analysis.strip())
-                plain_footer = "\n\nАнализ выполнен роботами (из кеша)" if from_cache else "\n\nАнализ выполнен роботами"
+                if analysis_type == "horoscope":
+                    plain_header = f"🔮 Гороскоп на основе сообщений за {period_hours} ч\n\n"
+                    plain_footer = "\n\nГороскоп составлен роботами (из кеша)" if from_cache else "\n\nГороскоп составлен роботами"
+                else:
+                    plain_header = f"📊 Анализ сообщений за последние {period_hours} ч\n\n"
+                    plain_footer = "\n\nАнализ выполнен роботами (из кеша)" if from_cache else "\n\nАнализ выполнен роботами"
                 
+                plain_analysis = MessageFormatter.strip_formatting(analysis.strip())
                 plain_result = plain_header + plain_analysis + plain_footer
                 
                 # Check length and split if needed
@@ -320,7 +351,10 @@ class MessageFormatter:
                 logger.error(f"Error in fallback formatting: {fallback_error}")
                 # Use max_length - 96 to leave room for header
                 safe_length = max_length - 96
-                return f"📊 Анализ за {period_hours} ч\n\n{analysis[:safe_length]}"
+                if analysis_type == "horoscope":
+                    return f"🔮 Гороскоп за {period_hours} ч\n\n{analysis[:safe_length]}"
+                else:
+                    return f"📊 Анализ за {period_hours} ч\n\n{analysis[:safe_length]}"
     
     @staticmethod
     def format_stats(stats: Dict[str, Any]) -> str:

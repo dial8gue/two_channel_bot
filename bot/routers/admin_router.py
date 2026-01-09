@@ -14,7 +14,7 @@ from services.analysis_service import AnalysisService
 from services.admin_service import AdminService
 from services.message_service import MessageService
 from utils.message_formatter import MessageFormatter
-from utils.telegram_sender import send_analysis_with_fallback
+from utils.telegram_sender import send_analysis_with_fallback, send_horoscope_with_fallback
 from config.settings import Config
 
 
@@ -575,18 +575,22 @@ def create_admin_router(config: Config) -> Router:
             
             # Determine behavior based on chat type and parameters
             if message.chat.type in [ChatType.GROUP, ChatType.SUPERGROUP]:
-                # Command from group - need username parameter
+                # Command from group
                 if not target_username:
-                    await message.answer(
-                        "❌ В групповом чате укажите пользователя.\n"
-                        "Использование: /horoscope @username"
+                    # No username specified - create horoscope for admin
+                    target_user_id = message.from_user.id
+                    actual_username = message.from_user.username or message.from_user.first_name or "Admin"
+                    
+                    logger.info(
+                        f"Creating horoscope for admin in group (no username specified)",
+                        extra={
+                            "admin_id": message.from_user.id,
+                            "chat_id": message.chat.id,
+                            "target_username": actual_username
+                        }
                     )
-                    return
-                
-                # Find user by username in this chat
-                processing_msg = await message.answer("🔮 Ищу пользователя и создаю гороскоп...")
-                
-                try:
+                else:
+                    # Username specified - find that user
                     # Get messages from last 12 hours to find the user
                     from datetime import datetime, timedelta
                     start_time = datetime.now() - timedelta(hours=12)
@@ -605,11 +609,15 @@ def create_admin_router(config: Config) -> Router:
                             break
                     
                     if not target_user_id:
-                        await processing_msg.edit_text(
+                        await message.answer(
                             f"❌ Пользователь @{target_username} не найден в сообщениях за последние 12 часов."
                         )
                         return
-                    
+                
+                # Create horoscope for the determined user
+                processing_msg = await message.answer("🔮 Звезды изучают сообщения...")
+                
+                try:
                     # Create horoscope
                     horoscope_result, from_cache = await analysis_service.create_horoscope_with_debounce(
                         user_id=target_user_id,
@@ -622,9 +630,9 @@ def create_admin_router(config: Config) -> Router:
                     await processing_msg.delete()
                     
                     # Send result with fallback mechanism
-                    await send_analysis_with_fallback(
+                    await send_horoscope_with_fallback(
                         send_func=lambda text, pm: message.answer(text, parse_mode=pm),
-                        analysis_result=horoscope_result,
+                        horoscope_result=horoscope_result,
                         period_hours=12,
                         from_cache=from_cache,
                         config=config
@@ -838,13 +846,13 @@ def create_admin_router(config: Config) -> Router:
                 )
                 
                 # Send result to admin's private chat with fallback mechanism
-                await send_analysis_with_fallback(
+                await send_horoscope_with_fallback(
                     send_func=lambda text, pm: callback.bot.send_message(
                         chat_id=callback.from_user.id,
                         text=text,
                         parse_mode=pm
                     ),
-                    analysis_result=horoscope_result,
+                    horoscope_result=horoscope_result,
                     period_hours=12,
                     from_cache=from_cache,
                     config=config
