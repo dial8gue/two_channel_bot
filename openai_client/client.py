@@ -4,12 +4,18 @@ OpenAI client for analyzing Telegram messages.
 import logging
 from datetime import datetime
 from typing import List, Optional
-from openai import AsyncOpenAI, APIError, RateLimitError, APIConnectionError
+from openai import AsyncOpenAI, RateLimitError, APIConnectionError
+from openai import APIError as OpenAIAPIError
 from database.models import MessageModel
 from utils.timezone_helper import format_datetime
 
 
 logger = logging.getLogger(__name__)
+
+
+class OpenAIClientError(Exception):
+    """Ошибка клиента OpenAI."""
+    pass
 
 
 class OpenAIClient:
@@ -125,25 +131,25 @@ class OpenAIClient:
             
         except RateLimitError as e:
             logger.error("OpenAI rate limit exceeded", exc_info=True)
-            raise APIError(
+            raise OpenAIClientError(
                 "Превышен лимит запросов к OpenAI API. Попробуйте позже."
             ) from e
             
         except APIConnectionError as e:
             logger.error("Failed to connect to OpenAI API", exc_info=True)
-            raise APIError(
+            raise OpenAIClientError(
                 "Не удалось подключиться к OpenAI API. Проверьте соединение."
             ) from e
             
-        except APIError as e:
+        except OpenAIAPIError as e:
             logger.error("OpenAI API error", exc_info=True)
-            raise APIError(
+            raise OpenAIClientError(
                 f"Ошибка OpenAI API: {str(e)}"
             ) from e
             
         except Exception as e:
             logger.error("Unexpected error during analysis", exc_info=True)
-            raise APIError(
+            raise OpenAIClientError(
                 f"Неожиданная ошибка при анализе: {str(e)}"
             ) from e
     
@@ -223,25 +229,25 @@ class OpenAIClient:
             
         except RateLimitError as e:
             logger.error("OpenAI rate limit exceeded", exc_info=True)
-            raise APIError(
+            raise OpenAIClientError(
                 "Превышен лимит запросов к OpenAI API. Попробуйте позже."
             ) from e
             
         except APIConnectionError as e:
             logger.error("Failed to connect to OpenAI API", exc_info=True)
-            raise APIError(
+            raise OpenAIClientError(
                 "Не удалось подключиться к OpenAI API. Проверьте соединение."
             ) from e
             
-        except APIError as e:
+        except OpenAIAPIError as e:
             logger.error("OpenAI API error", exc_info=True)
-            raise APIError(
+            raise OpenAIClientError(
                 f"Ошибка OpenAI API: {str(e)}"
             ) from e
             
         except Exception as e:
             logger.error("Unexpected error during horoscope creation", exc_info=True)
-            raise APIError(
+            raise OpenAIClientError(
                 f"Неожиданная ошибка при создании гороскопа: {str(e)}"
             ) from e
     
@@ -496,7 +502,7 @@ class OpenAIClient:
                 messages=[
                     {
                         "role": "system",
-                        "content": """Ты - ироничный ассистент группового чата с чувством юмора.
+                        "content": r"""Ты - ироничный ассистент группового чата с чувством юмора.
 
 ПРАВИЛА:
 1. Ответ должен быть НЕ БОЛЕЕ 5 предложений
@@ -530,19 +536,19 @@ class OpenAIClient:
             
         except RateLimitError as e:
             logger.error("Превышен лимит запросов OpenAI", exc_info=True)
-            raise APIError("Превышен лимит запросов. Попробуйте позже.") from e
+            raise OpenAIClientError("Превышен лимит запросов. Попробуйте позже.") from e
             
         except APIConnectionError as e:
             logger.error("Ошибка подключения к OpenAI API", exc_info=True)
-            raise APIError("Не удалось подключиться к API.") from e
+            raise OpenAIClientError("Не удалось подключиться к API.") from e
             
-        except APIError as e:
+        except OpenAIAPIError as e:
             logger.error("Ошибка OpenAI API", exc_info=True)
-            raise APIError(f"Ошибка API: {str(e)}") from e
+            raise OpenAIClientError(f"Ошибка API: {str(e)}") from e
             
         except Exception as e:
             logger.error("Неожиданная ошибка при ответе на вопрос", exc_info=True)
-            raise APIError(f"Ошибка: {str(e)}") from e
+            raise OpenAIClientError(f"Ошибка: {str(e)}") from e
     
     def _build_question_prompt(
         self,
@@ -570,9 +576,12 @@ class OpenAIClient:
         if reply_timestamp and sorted_messages:
             # Находим сообщения вокруг цитируемого (5 до и 5 после)
             # Ищем индекс ближайшего сообщения к timestamp цитаты
+            # Приводим reply_timestamp к naive datetime для сравнения
+            reply_ts_naive = reply_timestamp.replace(tzinfo=None) if reply_timestamp.tzinfo else reply_timestamp
             target_idx = 0
             for i, msg in enumerate(sorted_messages):
-                if msg.timestamp <= reply_timestamp:
+                msg_ts_naive = msg.timestamp.replace(tzinfo=None) if msg.timestamp.tzinfo else msg.timestamp
+                if msg_ts_naive <= reply_ts_naive:
                     target_idx = i
                 else:
                     break
@@ -668,17 +677,17 @@ class OpenAIClient:
             
         except RateLimitError as e:
             logger.error("Превышен лимит запросов OpenAI", exc_info=True)
-            raise APIError("Превышен лимит запросов. Попробуйте позже.") from e
+            raise OpenAIClientError("Превышен лимит запросов. Попробуйте позже.") from e
             
         except APIConnectionError as e:
             logger.error("Ошибка подключения к OpenAI API", exc_info=True)
-            raise APIError("Не удалось подключиться к API.") from e
+            raise OpenAIClientError("Не удалось подключиться к API.") from e
             
-        except APIError as e:
+        except OpenAIAPIError as e:
             logger.error("Ошибка OpenAI API", exc_info=True)
-            raise APIError(f"Ошибка API: {str(e)}") from e
+            raise OpenAIClientError(f"Ошибка API: {str(e)}") from e
             
         except Exception as e:
             logger.error("Неожиданная ошибка при ответе на вопрос", exc_info=True)
-            raise APIError(f"Ошибка: {str(e)}") from e
+            raise OpenAIClientError(f"Ошибка: {str(e)}") from e
 
