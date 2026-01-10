@@ -369,6 +369,7 @@ class AnalysisService:
         chat_id: int,
         user_id: int,
         reply_context: Optional[str] = None,
+        reply_timestamp: Optional[datetime] = None,
         bypass_debounce: bool = False
     ) -> str:
         """
@@ -379,6 +380,7 @@ class AnalysisService:
             chat_id: ID чата для получения контекста
             user_id: ID пользователя для debounce
             reply_context: Опциональный контекст из цитируемого сообщения
+            reply_timestamp: Опциональный timestamp цитируемого сообщения для выбора контекста
             bypass_debounce: Пропустить проверку debounce (для админа)
             
         Returns:
@@ -400,6 +402,7 @@ class AnalysisService:
                     "chat_id": chat_id,
                     "question_length": len(question),
                     "has_reply_context": reply_context is not None,
+                    "has_reply_timestamp": reply_timestamp is not None,
                     "bypass_debounce": bypass_debounce
                 }
             )
@@ -446,7 +449,8 @@ class AnalysisService:
             answer = await self.openai_client.answer_question(
                 question=question,
                 messages=messages,
-                reply_context=reply_context
+                reply_context=reply_context,
+                reply_timestamp=reply_timestamp
             )
             
             logger.info(

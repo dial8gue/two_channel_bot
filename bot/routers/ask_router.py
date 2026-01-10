@@ -65,19 +65,27 @@ async def _handle_question(
         config: Конфигурация бота
         is_admin: Является ли пользователь админом
     """
+    from datetime import datetime, timezone
+    
     # Получаем контекст из цитируемого сообщения (если есть)
     reply_context = None
+    reply_timestamp = None
+    
     if message.reply_to_message:
         reply_msg = message.reply_to_message
         reply_username = reply_msg.from_user.username or reply_msg.from_user.first_name or "Unknown"
         reply_text = reply_msg.text or reply_msg.caption or ""
         if reply_text:
             reply_context = f"@{reply_username}: {reply_text}"
+            # Получаем timestamp цитируемого сообщения
+            if reply_msg.date:
+                reply_timestamp = reply_msg.date.replace(tzinfo=timezone.utc)
             logger.debug(
                 "Найден контекст цитаты",
                 extra={
                     "reply_user": reply_username,
-                    "reply_text_length": len(reply_text)
+                    "reply_text_length": len(reply_text),
+                    "reply_timestamp": reply_timestamp.isoformat() if reply_timestamp else None
                 }
             )
     
@@ -91,6 +99,7 @@ async def _handle_question(
             chat_id=message.chat.id,
             user_id=message.from_user.id,
             reply_context=reply_context,
+            reply_timestamp=reply_timestamp,
             bypass_debounce=is_admin
         )
         

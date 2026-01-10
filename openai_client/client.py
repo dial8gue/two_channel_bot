@@ -2,6 +2,7 @@
 OpenAI client for analyzing Telegram messages.
 """
 import logging
+from datetime import datetime
 from typing import List, Optional
 from openai import AsyncOpenAI, APIError, RateLimitError, APIConnectionError
 from database.models import MessageModel
@@ -383,7 +384,8 @@ class OpenAIClient:
         self,
         question: str,
         messages: List[MessageModel],
-        reply_context: Optional[str] = None
+        reply_context: Optional[str] = None,
+        reply_timestamp: Optional[datetime] = None
     ) -> str:
         """
         Ответить на вопрос пользователя на основе контекста чата.
@@ -392,6 +394,7 @@ class OpenAIClient:
             question: Вопрос пользователя
             messages: Список сообщений для контекста
             reply_context: Опциональный контекст из цитируемого сообщения
+            reply_timestamp: Опциональный timestamp цитируемого сообщения для выбора контекста
             
         Returns:
             Ответ на вопрос (максимум 5 предложений)
@@ -400,14 +403,15 @@ class OpenAIClient:
             APIError: При ошибке OpenAI API
         """
         try:
-            prompt = self._build_question_prompt(question, messages, reply_context)
+            prompt = self._build_question_prompt(question, messages, reply_context, reply_timestamp)
             
             logger.info(
                 "Отправка запроса на ответ вопроса в OpenAI",
                 extra={
                     "question_length": len(question),
                     "message_count": len(messages),
-                    "has_reply_context": reply_context is not None
+                    "has_reply_context": reply_context is not None,
+                    "has_reply_timestamp": reply_timestamp is not None
                 }
             )
             
@@ -416,15 +420,16 @@ class OpenAIClient:
                 messages=[
                     {
                         "role": "system",
-                        "content": """Ты - умный ассистент группового чата. Отвечай на вопросы кратко и по делу.
+                        "content": """Ты - ироничный ассистент группового чата с чувством юмора.
 
 ПРАВИЛА:
 1. Ответ должен быть НЕ БОЛЕЕ 5 предложений
 2. Используй контекст сообщений чата для более точного ответа
 3. Если вопрос связан с цитируемым сообщением - учитывай его в первую очередь
 4. При упоминании пользователей экранируй подчеркивания: @user\_name
-5. Будь дружелюбным, но лаконичным
-6. Если не можешь ответить на вопрос - честно скажи об этом"""
+5. Используй иронию, сарказм и неформальный стиль общения
+6. Можешь подкалывать, но без прямых оскорблений
+7. Если не можешь ответить на вопрос - скажи об этом"""
                     },
                     {
                         "role": "user",
@@ -432,7 +437,7 @@ class OpenAIClient:
                     }
                 ],
                 max_tokens=self.inline_max_tokens,
-                temperature=0.7
+                temperature=0.8  # Чуть выше для креативности
             )
             
             answer = response.choices[0].message.content
@@ -467,7 +472,8 @@ class OpenAIClient:
         self,
         question: str,
         messages: List[MessageModel],
-        reply_context: Optional[str] = None
+        reply_context: Optional[str] = None,
+        reply_timestamp: Optional[datetime] = None
     ) -> str:
         """
         Построить промпт для ответа на вопрос.
@@ -476,6 +482,7 @@ class OpenAIClient:
             question: Вопрос пользователя
             messages: Список сообщений для контекста
             reply_context: Опциональный контекст из цитируемого сообщения
+            reply_timestamp: Опциональный timestamp цитируемого сообщения
             
         Returns:
             Сформированный промпт
@@ -483,8 +490,34 @@ class OpenAIClient:
         # Сортируем сообщения по времени
         sorted_messages = sorted(messages, key=lambda m: m.timestamp)
         
-        # Формируем контекст из последних сообщений (ограничиваем для экономии токенов)
-        recent_messages = sorted_messages[-10:]  # Последние 10 сообщений
+        # Выбираем контекст в зависимости от наличия цитаты
+        if reply_timestamp and sorted_messages:
+            # Находим сообщения вокруг цитируемого (5 до и 5 после)
+            # Ищем индекс ближайшего сообщения к timestamp цитаты
+            target_idx = 0
+            for i, msg in enumerate(sorted_messages):
+                if msg.timestamp <= reply_timestamp:
+                    target_idx = i
+                else:
+                    break
+            
+            # Берём 5 сообщений до и 5 после цитируемого
+            start_idx = max(0, target_idx - 5)
+            end_idx = min(len(sorted_messages), target_idx + 6)
+            recent_messages = sorted_messages[start_idx:end_idx]
+            
+            logger.debug(
+                "Контекст вокруг цитируемого сообщения",
+                extra={
+                    "target_idx": target_idx,
+                    "start_idx": start_idx,
+                    "end_idx": end_idx,
+                    "context_size": len(recent_messages)
+                }
+            )
+        else:
+            # Без цитаты — берём последние 10 сообщений
+            recent_messages = sorted_messages[-10:]
         
         message_lines = []
         for msg in recent_messages:
@@ -499,7 +532,7 @@ class OpenAIClient:
         if reply_context:
             prompt_parts.append(f"\nЦИТИРУЕМОЕ СООБЩЕНИЕ:\n{reply_context}")
         
-        prompt_parts.append(f"\nКОНТЕКСТ ЧАТА (последние сообщения):\n{messages_text}")
+        prompt_parts.append(f"\nКОНТЕКСТ ЧАТА (сообщения вокруг цитаты):\n{messages_text}")
         
         prompt_parts.append("\nОтветь на вопрос кратко (максимум 5 предложений), учитывая контекст чата.")
         
