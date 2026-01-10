@@ -243,7 +243,7 @@ class AnalysisService:
                 chat_id=chat_id
             )
             
-            # Generate cache key and check cache
+            # Generate cache key and check cache (даже для пустых сообщений)
             cache_key = self._generate_horoscope_cache_key(messages, user_id, username)
             cached_result = await self.cache_manager.get(cache_key)
             
@@ -417,7 +417,7 @@ class AnalysisService:
         Generate a cache key for horoscope based on user's messages.
         
         Args:
-            messages: List of user's messages
+            messages: List of user's messages (can be empty)
             user_id: User ID
             username: Username for additional uniqueness
             
@@ -437,8 +437,9 @@ class AnalysisService:
                     f"{msg.chat_id}:{msg.message_id}:{msg.text}:{reaction_summary}"
                 )
             
-            # Create hash including user info and messages
-            combined = f"horoscope:{user_id}:{username}:" + "|".join(message_data)
+            # Create hash including user info and messages (или "no_messages" если пусто)
+            messages_part = "|".join(message_data) if message_data else "no_messages"
+            combined = f"horoscope:{user_id}:{username}:{messages_part}"
             cache_key = hashlib.sha256(combined.encode('utf-8')).hexdigest()
             
             logger.debug(

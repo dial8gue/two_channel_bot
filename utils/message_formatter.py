@@ -247,84 +247,56 @@ class MessageFormatter:
         Returns:
             Formatted message(s) - single string or list if split needed
         """
-        try:
-            # Create header with period information (with intentional formatting)
+        # Конфигурация форматирования по parse_mode
+        FORMAT_CONFIG = {
+            "Markdown": {"bold": ("*", "*"), "italic": ("_", "_")},
+            "HTML": {"bold": ("<b>", "</b>"), "italic": ("<i>", "</i>")},
+            None: {"bold": ("", ""), "italic": ("", "")},
+        }
+        
+        def get_format(mode: str) -> dict:
+            """Получить конфигурацию форматирования для режима."""
+            return FORMAT_CONFIG.get(mode, FORMAT_CONFIG[None])
+        
+        def build_header(mode: str) -> str:
+            """Построить заголовок сообщения."""
+            fmt = get_format(mode)
+            b_open, b_close = fmt["bold"]
+            
             if analysis_type == "horoscope":
-                # Escape username for different parse modes
                 if username:
-                    if parse_mode == "Markdown":
-                        header = f"🔮 *Гороскоп для @{username}*\n\n"
-                    elif parse_mode == "HTML":
-                        escaped_username = username.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-                        header = f"🔮 <b>Гороскоп для @{escaped_username}</b>\n\n"
-                    else:
-                        header = f"🔮 Гороскоп для @{username}\n\n"
-                else:
-                    # Fallback if no username provided
-                    if parse_mode == "Markdown":
-                        header = f"🔮 *Гороскоп по сообщениям за {period_hours} ч*\n\n"
-                    elif parse_mode == "HTML":
-                        header = f"🔮 <b>Гороскоп по сообщениям за {period_hours} ч</b>\n\n"
-                    else:
-                        header = f"🔮 Гороскоп по сообщениям за {period_hours} ч\n\n"
-            else:
-                if parse_mode == "Markdown":
-                    header = f"📊 *Анализ сообщений за последние {period_hours} ч*\n\n"
-                elif parse_mode == "HTML":
-                    header = f"📊 <b>Анализ сообщений за последние {period_hours} ч</b>\n\n"
-                else:
-                    header = f"📊 Анализ сообщений за последние {period_hours} ч\n\n"
+                    # Экранирование username для HTML
+                    safe_username = (
+                        username.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+                        if mode == "HTML" else username
+                    )
+                    return f"🔮 {b_open}Гороскоп для @{safe_username}{b_close}\n\n"
+                return f"🔮 {b_open}Гороскоп по сообщениям за {period_hours} ч{b_close}\n\n"
             
-            # Apply appropriate escaping function based on parse_mode
-            formatted_analysis = analysis.strip()
+            return f"📊 {b_open}Анализ сообщений за последние {period_hours} ч{b_close}\n\n"
+        
+        def build_footer(mode: str) -> str:
+            """Построить футер сообщения."""
+            fmt = get_format(mode)
+            i_open, i_close = fmt["italic"]
             
-            if parse_mode == "Markdown":
-                # Don't escape - analysis is already in Markdown format from LLM
-                pass
-            elif parse_mode == "HTML":
-                # Convert to HTML format and escape HTML special characters
-                formatted_analysis = MessageFormatter.convert_to_html(formatted_analysis)
-            else:
-                # Plain text - strip any formatting
-                formatted_analysis = MessageFormatter.strip_formatting(formatted_analysis)
+            base_text = "Гороскоп составлен роботами" if analysis_type == "horoscope" else "Анализ выполнен роботами"
+            cache_suffix = " (из кеша)" if from_cache else ""
             
-            # Add footer (with intentional formatting preserved)
-            if analysis_type == "horoscope":
-                if parse_mode == "Markdown":
-                    if from_cache:
-                        footer = "\n\n_Гороскоп составлен роботами (из кеша)_"
-                    else:
-                        footer = "\n\n_Гороскоп составлен роботами_"
-                elif parse_mode == "HTML":
-                    if from_cache:
-                        footer = "\n\n<i>Гороскоп составлен роботами (из кеша)</i>"
-                    else:
-                        footer = "\n\n<i>Гороскоп составлен роботами</i>"
-                else:
-                    if from_cache:
-                        footer = "\n\nГороскоп составлен роботами (из кеша)"
-                    else:
-                        footer = "\n\nГороскоп составлен роботами"
-            else:
-                if parse_mode == "Markdown":
-                    if from_cache:
-                        footer = "\n\n_Анализ выполнен роботами (из кеша)_"
-                    else:
-                        footer = "\n\n_Анализ выполнен роботами_"
-                elif parse_mode == "HTML":
-                    if from_cache:
-                        footer = "\n\n<i>Анализ выполнен роботами (из кеша)</i>"
-                    else:
-                        footer = "\n\n<i>Анализ выполнен роботами</i>"
-                else:
-                    if from_cache:
-                        footer = "\n\nАнализ выполнен роботами (из кеша)"
-                    else:
-                        footer = "\n\nАнализ выполнен роботами"
-            
-            result = header + formatted_analysis + footer
-            
-            # Check message length and split if needed
+            return f"\n\n{i_open}{base_text}{cache_suffix}{i_close}"
+        
+        def format_content(text: str, mode: str) -> str:
+            """Форматировать контент в зависимости от режима."""
+            match mode:
+                case "Markdown":
+                    return text  # LLM уже возвращает Markdown
+                case "HTML":
+                    return MessageFormatter.convert_to_html(text)
+                case _:
+                    return MessageFormatter.strip_formatting(text)
+        
+        def finalize_result(result: str) -> Union[str, List[str]]:
+            """Проверить длину и разбить при необходимости."""
             if len(result) > max_length:
                 logger.info(f"Message exceeds {max_length} chars ({len(result)}), splitting into chunks")
                 chunks = MessageFormatter.split_long_message(result, max_length=max_length)
@@ -333,47 +305,37 @@ class MessageFormatter:
             
             logger.debug(f"Formatted analysis result ({len(result)} chars, from_cache={from_cache}, parse_mode={parse_mode})")
             return result
+        
+        try:
+            header = build_header(parse_mode)
+            formatted_analysis = format_content(analysis.strip(), parse_mode)
+            footer = build_footer(parse_mode)
+            
+            return finalize_result(header + formatted_analysis + footer)
             
         except Exception as e:
-            # Fallback to plain text on any error
+            # Fallback на plain text при любой ошибке
             logger.error(f"Error formatting analysis result with parse_mode={parse_mode}: {e}")
             logger.info("Falling back to plain text formatting")
             
             try:
-                # Strip all formatting and create a simple plain text message
-                if analysis_type == "horoscope":
-                    if username:
-                        plain_header = f"🔮 Гороскоп для @{username}\n\n"
-                    else:
-                        plain_header = f"🔮 Гороскоп на основе сообщений за {period_hours} ч\n\n"
-                    plain_footer = "\n\nГороскоп составлен роботами (из кеша)" if from_cache else "\n\nГороскоп составлен роботами"
-                else:
-                    plain_header = f"📊 Анализ сообщений за последние {period_hours} ч\n\n"
-                    plain_footer = "\n\nАнализ выполнен роботами (из кеша)" if from_cache else "\n\nАнализ выполнен роботами"
-                
+                header = build_header(None)
                 plain_analysis = MessageFormatter.strip_formatting(analysis.strip())
-                plain_result = plain_header + plain_analysis + plain_footer
+                footer = build_footer(None)
                 
-                # Check length and split if needed
-                if len(plain_result) > max_length:
-                    chunks = MessageFormatter.split_long_message(plain_result, max_length=max_length)
-                    logger.debug(f"Fallback: formatted into {len(chunks)} chunks")
-                    return chunks
-                
-                return plain_result
+                return finalize_result(header + plain_analysis + footer)
                 
             except Exception as fallback_error:
-                # Ultimate fallback - return minimal safe message
+                # Крайний fallback - минимальное безопасное сообщение
                 logger.error(f"Error in fallback formatting: {fallback_error}")
-                # Use max_length - 96 to leave room for header
                 safe_length = max_length - 96
+                
                 if analysis_type == "horoscope":
-                    if username:
-                        return f"🔮 Гороскоп для @{username}\n\n{analysis[:safe_length]}"
-                    else:
-                        return f"🔮 Гороскоп за {period_hours} ч\n\n{analysis[:safe_length]}"
+                    prefix = f"🔮 Гороскоп для @{username}" if username else f"🔮 Гороскоп за {period_hours} ч"
                 else:
-                    return f"📊 Анализ за {period_hours} ч\n\n{analysis[:safe_length]}"
+                    prefix = f"📊 Анализ за {period_hours} ч"
+                
+                return f"{prefix}\n\n{analysis[:safe_length]}"
     
     @staticmethod
     def format_stats(stats: Dict[str, Any]) -> str:
@@ -386,38 +348,29 @@ class MessageFormatter:
         Returns:
             Formatted statistics message with Markdown
         """
+        # Конфигурация полей статистики: (ключ, emoji, шаблон, требует_значение)
+        STATS_FIELDS = [
+            ('total_messages', '📝', 'Всего сообщений: *{value}*', False),
+            ('oldest_message', '📅', 'Самое старое сообщение: {value}', True),
+            ('newest_message', '📅', 'Самое новое сообщение: {value}', True),
+            ('cache_entries', '💾', 'Записей в кеше: *{value}*', False),
+            ('storage_period_hours', '⏱', 'Период хранения: *{value} ч*', False),
+        ]
+        
         try:
             message_parts = ["📈 *Статистика базы данных*\n"]
             
-            # Total messages
-            if 'total_messages' in stats:
-                message_parts.append(f"📝 Всего сообщений: *{stats['total_messages']}*")
+            for key, emoji, template, requires_value in STATS_FIELDS:
+                if key in stats and (not requires_value or stats[key]):
+                    message_parts.append(f"{emoji} {template.format(value=stats[key])}")
             
-            # Oldest message
-            if 'oldest_message' in stats and stats['oldest_message']:
-                message_parts.append(f"📅 Самое старое сообщение: {stats['oldest_message']}")
-            
-            # Newest message
-            if 'newest_message' in stats and stats['newest_message']:
-                message_parts.append(f"📅 Самое новое сообщение: {stats['newest_message']}")
-            
-            # Cache entries
-            if 'cache_entries' in stats:
-                message_parts.append(f"💾 Записей в кеше: *{stats['cache_entries']}*")
-            
-            # Storage period
-            if 'storage_period_hours' in stats:
-                message_parts.append(f"⏱ Период хранения: *{stats['storage_period_hours']} ч*")
-            
-            # Collection status
+            # Особый случай для collection_enabled (булево значение с кастомным форматом)
             if 'collection_enabled' in stats:
                 status = "✅ Включен" if stats['collection_enabled'] else "❌ Выключен"
                 message_parts.append(f"🔄 Сбор сообщений: {status}")
             
-            result = "\n".join(message_parts)
-            
             logger.debug("Formatted statistics message")
-            return result
+            return "\n".join(message_parts)
             
         except Exception as e:
             logger.error(f"Error formatting stats: {e}")
