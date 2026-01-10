@@ -161,11 +161,6 @@ async def main() -> None:
         
         # Register routers
         logger.info("Registering routers...")
-        
-        # Ask router должен быть первым для обработки упоминаний бота
-        ask_router = create_ask_router(config)
-        dp.include_router(ask_router)
-        
         dp.include_router(message_router)
         dp.include_router(reaction_router)
         
@@ -176,6 +171,10 @@ async def main() -> None:
         # Create and register user router
         user_router = create_user_router(config)
         dp.include_router(user_router)
+        
+        # Ask router должен быть последним - он ловит все текстовые сообщения
+        ask_router = create_ask_router(config)
+        dp.include_router(ask_router)
         
         # Inject dependencies into handlers
         dp['message_service'] = message_service
