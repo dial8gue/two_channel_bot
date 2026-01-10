@@ -57,6 +57,10 @@ class Config:
     # Timezone
     timezone: Optional[str]
     
+    # Inline Mode
+    inline_debounce_seconds: int
+    inline_max_tokens: int
+    
     @classmethod
     def from_env(cls) -> "Config":
         """
@@ -96,6 +100,8 @@ class Config:
         enable_markdown_escaping = cls._get_bool_env("ENABLE_MARKDOWN_ESCAPING", default=True)
         max_message_length = cls._get_int_env("MAX_MESSAGE_LENGTH", default=4096)
         timezone = cls._get_validated_timezone_env("TIMEZONE", default=None)
+        inline_debounce_seconds = cls._get_int_env("INLINE_DEBOUNCE_SECONDS", default=3600)  # 1 hour
+        inline_max_tokens = cls._get_int_env("INLINE_MAX_TOKENS", default=500)
         
         # Validate positive values
         cls._validate_positive("MAX_TOKENS", max_tokens)
@@ -109,6 +115,8 @@ class Config:
         cls._validate_positive("BUFFER_SIZE", buffer_size)
         cls._validate_positive("BUFFER_FLUSH_INTERVAL_SECONDS", buffer_flush_interval_seconds)
         cls._validate_positive("MAX_MESSAGE_LENGTH", max_message_length)
+        cls._validate_positive("INLINE_DEBOUNCE_SECONDS", inline_debounce_seconds)
+        cls._validate_positive("INLINE_MAX_TOKENS", inline_max_tokens)
         
         # Validate parse mode
         valid_parse_modes = ["Markdown", "HTML", "None", None]
@@ -138,6 +146,8 @@ class Config:
             enable_markdown_escaping=enable_markdown_escaping,
             max_message_length=max_message_length,
             timezone=timezone,
+            inline_debounce_seconds=inline_debounce_seconds,
+            inline_max_tokens=inline_max_tokens,
         )
     
     @staticmethod

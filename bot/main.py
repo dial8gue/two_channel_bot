@@ -30,6 +30,7 @@ from bot.routers.message_router import router as message_router
 from bot.routers.reaction_router import router as reaction_router
 from bot.routers.admin_router import create_admin_router
 from bot.routers.user_router import create_user_router
+from bot.routers.ask_router import create_ask_router
 from bot.middlewares.collection_middleware import CollectionMiddleware
 
 
@@ -114,6 +115,7 @@ async def main() -> None:
             model=config.openai_model,
             max_tokens=config.max_tokens,
             horoscope_max_tokens=config.horoscope_max_tokens,
+            inline_max_tokens=config.inline_max_tokens,
             timezone=config.timezone
         )
         
@@ -132,7 +134,8 @@ async def main() -> None:
             debounce_manager=debounce_manager,
             debounce_interval_seconds=config.debounce_interval_seconds,
             cache_ttl_minutes=config.cache_ttl_minutes,
-            analysis_period_hours=config.analysis_period_hours
+            analysis_period_hours=config.analysis_period_hours,
+            inline_debounce_seconds=config.inline_debounce_seconds
         )
         
         admin_service = AdminService(
@@ -169,10 +172,15 @@ async def main() -> None:
         user_router = create_user_router(config)
         dp.include_router(user_router)
         
+        # Create and register ask router (inline questions)
+        ask_router = create_ask_router(config)
+        dp.include_router(ask_router)
+        
         # Inject dependencies into handlers
         dp['message_service'] = message_service
         dp['analysis_service'] = analysis_service
         dp['admin_service'] = admin_service
+        dp['openai_client'] = openai_client
         dp['config'] = config
         
         logger.info("Bot initialization complete")

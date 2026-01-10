@@ -22,6 +22,7 @@ class AnalysisService:
     
     # Operation name for debounce
     ANALYSIS_OPERATION = "analyze_messages"
+    INLINE_OPERATION = "inline_question"
     
     def __init__(
         self,
@@ -31,7 +32,8 @@ class AnalysisService:
         debounce_manager: DebounceManager,
         debounce_interval_seconds: int,
         cache_ttl_minutes: int,
-        analysis_period_hours: int
+        analysis_period_hours: int,
+        inline_debounce_seconds: int = 3600
     ):
         """
         Initialize analysis service.
@@ -44,6 +46,7 @@ class AnalysisService:
             debounce_interval_seconds: Minimum interval between analysis requests
             cache_ttl_minutes: Time to live for cached results
             analysis_period_hours: Default analysis period in hours
+            inline_debounce_seconds: Minimum interval between inline questions for users
         """
         self.message_repository = message_repository
         self.openai_client = openai_client
@@ -52,6 +55,7 @@ class AnalysisService:
         self.debounce_interval_seconds = debounce_interval_seconds
         self.cache_ttl_minutes = cache_ttl_minutes
         self.analysis_period_hours = analysis_period_hours
+        self.inline_debounce_seconds = inline_debounce_seconds
     
     async def analyze_messages_with_debounce(
         self,
@@ -358,6 +362,119 @@ class AnalysisService:
             operation_type=self.ANALYSIS_OPERATION,
             bypass_debounce=False
         )
+    
+    async def answer_question_with_debounce(
+        self,
+        question: str,
+        chat_id: int,
+        user_id: int,
+        reply_context: Optional[str] = None,
+        bypass_debounce: bool = False
+    ) -> str:
+        """
+        Ответить на вопрос пользователя с защитой от спама (debounce).
+        
+        Args:
+            question: Вопрос пользователя
+            chat_id: ID чата для получения контекста
+            user_id: ID пользователя для debounce
+            reply_context: Опциональный контекст из цитируемого сообщения
+            bypass_debounce: Пропустить проверку debounce (для админа)
+            
+        Returns:
+            Ответ на вопрос
+            
+        Raises:
+            ValueError: Если сработал debounce, с оставшимся временем в секундах
+            Exception: При ошибке генерации ответа
+        """
+        try:
+            # Формируем ключ операции для debounce (per user per chat)
+            operation_key = f"{self.INLINE_OPERATION}:{user_id}:{chat_id}"
+            
+            logger.info(
+                "Начало обработки инлайн-вопроса",
+                extra={
+                    "operation_key": operation_key,
+                    "user_id": user_id,
+                    "chat_id": chat_id,
+                    "question_length": len(question),
+                    "has_reply_context": reply_context is not None,
+                    "bypass_debounce": bypass_debounce
+                }
+            )
+            
+            # Проверяем debounce (если не админ)
+            if not bypass_debounce:
+                can_execute, remaining = await self.debounce_manager.can_execute(
+                    operation=operation_key,
+                    interval_seconds=self.inline_debounce_seconds
+                )
+                
+                if not can_execute:
+                    logger.warning(
+                        "Инлайн-вопрос заблокирован debounce",
+                        extra={
+                            "operation_key": operation_key,
+                            "user_id": user_id,
+                            "remaining_seconds": remaining
+                        }
+                    )
+                    raise ValueError(f"{remaining}")
+                
+                # Отмечаем выполнение операции сразу после проверки
+                await self.debounce_manager.mark_executed(operation_key)
+                logger.debug(
+                    "Операция отмечена как выполненная для debounce",
+                    extra={"operation_key": operation_key}
+                )
+            else:
+                logger.debug(
+                    "Пропуск проверки debounce для админа",
+                    extra={"user_id": user_id, "operation_key": operation_key}
+                )
+            
+            # Получаем контекст сообщений (последние 6 часов)
+            start_time = datetime.now() - timedelta(hours=6)
+            messages = await self.message_repository.get_by_period(
+                start_time=start_time,
+                chat_id=chat_id
+            )
+            
+            # Генерируем ответ через OpenAI
+            logger.info("Генерация ответа через OpenAI")
+            answer = await self.openai_client.answer_question(
+                question=question,
+                messages=messages,
+                reply_context=reply_context
+            )
+            
+            logger.info(
+                "Ответ на вопрос сгенерирован",
+                extra={
+                    "user_id": user_id,
+                    "chat_id": chat_id,
+                    "answer_length": len(answer),
+                    "context_messages": len(messages)
+                }
+            )
+            
+            return answer
+            
+        except ValueError:
+            # Re-raise debounce errors
+            raise
+        except Exception as e:
+            logger.error(
+                f"Ошибка при ответе на вопрос: {e}",
+                extra={
+                    "user_id": user_id,
+                    "chat_id": chat_id,
+                    "question": question[:100]
+                },
+                exc_info=True
+            )
+            raise
     
 
 

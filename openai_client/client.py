@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 class OpenAIClient:
     """Client for interacting with OpenAI API to analyze messages."""
     
-    def __init__(self, api_key: str, base_url: str = None, model: str = "gpt-4o-mini", max_tokens: int = 4000, horoscope_max_tokens: int = 2000, timezone: Optional[str] = None):
+    def __init__(self, api_key: str, base_url: str = None, model: str = "gpt-4o-mini", max_tokens: int = 4000, horoscope_max_tokens: int = 2000, inline_max_tokens: int = 500, timezone: Optional[str] = None):
         """
         Initialize OpenAI client.
         
@@ -24,6 +24,7 @@ class OpenAIClient:
             model: Model to use for analysis
             max_tokens: Maximum tokens for API requests (analysis)
             horoscope_max_tokens: Maximum tokens for horoscope requests
+            inline_max_tokens: Maximum tokens for inline question answers
             timezone: Optional IANA timezone identifier for timestamp formatting
         """
         client_kwargs = {"api_key": api_key}
@@ -34,6 +35,7 @@ class OpenAIClient:
         self.model = model
         self.max_tokens = max_tokens
         self.horoscope_max_tokens = horoscope_max_tokens
+        self.inline_max_tokens = inline_max_tokens
         self.timezone = timezone
         logger.info(
             "OpenAI client initialized",
@@ -41,6 +43,7 @@ class OpenAIClient:
                 "model": model,
                 "max_tokens": max_tokens,
                 "horoscope_max_tokens": horoscope_max_tokens,
+                "inline_max_tokens": inline_max_tokens,
                 "base_url": base_url or "default",
                 "timezone": timezone or "UTC"
             }
@@ -375,4 +378,198 @@ class OpenAIClient:
 
 НАЧНИ ОТВЕТ СРАЗУ С ПУНКТА (*⭐ Что тебя ждет в ближайшее время*). НЕ ДОБАВЛЯЙ ВСТУПЛЕНИЙ ИЛИ ЗАКЛЮЧЕНИЙ."""
         return prompt
+    
+    async def answer_question(
+        self,
+        question: str,
+        messages: List[MessageModel],
+        reply_context: Optional[str] = None
+    ) -> str:
+        """
+        Ответить на вопрос пользователя на основе контекста чата.
+        
+        Args:
+            question: Вопрос пользователя
+            messages: Список сообщений для контекста
+            reply_context: Опциональный контекст из цитируемого сообщения
+            
+        Returns:
+            Ответ на вопрос (максимум 5 предложений)
+            
+        Raises:
+            APIError: При ошибке OpenAI API
+        """
+        try:
+            prompt = self._build_question_prompt(question, messages, reply_context)
+            
+            logger.info(
+                "Отправка запроса на ответ вопроса в OpenAI",
+                extra={
+                    "question_length": len(question),
+                    "message_count": len(messages),
+                    "has_reply_context": reply_context is not None
+                }
+            )
+            
+            response = await self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": """Ты - умный ассистент группового чата. Отвечай на вопросы кратко и по делу.
+
+ПРАВИЛА:
+1. Ответ должен быть НЕ БОЛЕЕ 5 предложений
+2. Используй контекст сообщений чата для более точного ответа
+3. Если вопрос связан с цитируемым сообщением - учитывай его в первую очередь
+4. При упоминании пользователей экранируй подчеркивания: @user\_name
+5. Будь дружелюбным, но лаконичным
+6. Если не можешь ответить на вопрос - честно скажи об этом"""
+                    },
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ],
+                max_tokens=self.inline_max_tokens,
+                temperature=0.7
+            )
+            
+            answer = response.choices[0].message.content
+            
+            logger.info(
+                "Ответ на вопрос получен",
+                extra={
+                    "tokens_used": response.usage.total_tokens,
+                    "response_length": len(answer) if answer else 0
+                }
+            )
+            
+            return answer or "Не удалось сформировать ответ."
+            
+        except RateLimitError as e:
+            logger.error("Превышен лимит запросов OpenAI", exc_info=True)
+            raise APIError("Превышен лимит запросов. Попробуйте позже.") from e
+            
+        except APIConnectionError as e:
+            logger.error("Ошибка подключения к OpenAI API", exc_info=True)
+            raise APIError("Не удалось подключиться к API.") from e
+            
+        except APIError as e:
+            logger.error("Ошибка OpenAI API", exc_info=True)
+            raise APIError(f"Ошибка API: {str(e)}") from e
+            
+        except Exception as e:
+            logger.error("Неожиданная ошибка при ответе на вопрос", exc_info=True)
+            raise APIError(f"Ошибка: {str(e)}") from e
+    
+    def _build_question_prompt(
+        self,
+        question: str,
+        messages: List[MessageModel],
+        reply_context: Optional[str] = None
+    ) -> str:
+        """
+        Построить промпт для ответа на вопрос.
+        
+        Args:
+            question: Вопрос пользователя
+            messages: Список сообщений для контекста
+            reply_context: Опциональный контекст из цитируемого сообщения
+            
+        Returns:
+            Сформированный промпт
+        """
+        # Сортируем сообщения по времени
+        sorted_messages = sorted(messages, key=lambda m: m.timestamp)
+        
+        # Формируем контекст из последних сообщений (ограничиваем для экономии токенов)
+        recent_messages = sorted_messages[-10:]  # Последние 10 сообщений
+        
+        message_lines = []
+        for msg in recent_messages:
+            timestamp_str = format_datetime(msg.timestamp, self.timezone)
+            message_lines.append(f"[{timestamp_str}] @{msg.username}: {msg.text}")
+        
+        messages_text = "\n".join(message_lines) if message_lines else "Нет сообщений в контексте"
+        
+        # Формируем промпт
+        prompt_parts = [f"ВОПРОС: {question}"]
+        
+        if reply_context:
+            prompt_parts.append(f"\nЦИТИРУЕМОЕ СООБЩЕНИЕ:\n{reply_context}")
+        
+        prompt_parts.append(f"\nКОНТЕКСТ ЧАТА (последние сообщения):\n{messages_text}")
+        
+        prompt_parts.append("\nОтветь на вопрос кратко (максимум 5 предложений), учитывая контекст чата.")
+        
+        return "\n".join(prompt_parts)
+    
+    async def answer_question_simple(self, question: str) -> str:
+        """
+        Ответить на вопрос без контекста чата (для личных сообщений).
+        
+        Args:
+            question: Вопрос пользователя
+            
+        Returns:
+            Ответ на вопрос (максимум 5 предложений)
+            
+        Raises:
+            APIError: При ошибке OpenAI API
+        """
+        try:
+            logger.info(
+                "Отправка простого вопроса в OpenAI",
+                extra={"question_length": len(question)}
+            )
+            
+            response = await self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": """Ты - умный ассистент. Отвечай на вопросы кратко и по делу.
+
+ПРАВИЛА:
+1. Ответ должен быть НЕ БОЛЕЕ 5 предложений
+2. Будь дружелюбным, но лаконичным
+3. Если не можешь ответить на вопрос - честно скажи об этом"""
+                    },
+                    {
+                        "role": "user",
+                        "content": question
+                    }
+                ],
+                max_tokens=self.inline_max_tokens,
+                temperature=0.7
+            )
+            
+            answer = response.choices[0].message.content
+            
+            logger.info(
+                "Ответ на простой вопрос получен",
+                extra={
+                    "tokens_used": response.usage.total_tokens,
+                    "response_length": len(answer) if answer else 0
+                }
+            )
+            
+            return answer or "Не удалось сформировать ответ."
+            
+        except RateLimitError as e:
+            logger.error("Превышен лимит запросов OpenAI", exc_info=True)
+            raise APIError("Превышен лимит запросов. Попробуйте позже.") from e
+            
+        except APIConnectionError as e:
+            logger.error("Ошибка подключения к OpenAI API", exc_info=True)
+            raise APIError("Не удалось подключиться к API.") from e
+            
+        except APIError as e:
+            logger.error("Ошибка OpenAI API", exc_info=True)
+            raise APIError(f"Ошибка API: {str(e)}") from e
+            
+        except Exception as e:
+            logger.error("Неожиданная ошибка при ответе на вопрос", exc_info=True)
+            raise APIError(f"Ошибка: {str(e)}") from e
 
