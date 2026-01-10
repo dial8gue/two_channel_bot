@@ -103,3 +103,74 @@ async def handle_group_message(message: Message, message_service: MessageService
             exc_info=True
         )
         # Don't re-raise - we don't want to stop the bot on message handling errors
+
+
+@router.edited_message(
+    lambda message: message.chat.type in [ChatType.GROUP, ChatType.SUPERGROUP],
+    lambda message: message.from_user and not message.from_user.is_bot
+)
+async def handle_edited_message(message: Message, message_service: MessageService):
+    """
+    Обработка отредактированных сообщений в групповых чатах.
+    
+    Обновляет текст сообщения в базе данных.
+    """
+    try:
+        if not message.text:
+            logger.debug(
+                "Пропуск отредактированного сообщения без текста",
+                extra={
+                    "message_id": message.message_id,
+                    "chat_id": message.chat.id
+                }
+            )
+            return
+        
+        user_id = message.from_user.id if message.from_user else 0
+        username = message.from_user.username or message.from_user.first_name or "Unknown"
+        
+        reply_to_message_id = None
+        if message.reply_to_message:
+            reply_to_message_id = message.reply_to_message.message_id
+        
+        # Используем edit_date если есть, иначе date
+        edit_date = message.edit_date or message.date
+        timestamp = datetime.fromtimestamp(edit_date.timestamp())
+        
+        logger.debug(
+            "Обработка отредактированного сообщения",
+            extra={
+                "message_id": message.message_id,
+                "chat_id": message.chat.id,
+                "user_id": user_id,
+                "username": username,
+                "text_length": len(message.text)
+            }
+        )
+        
+        # Сохраняем/обновляем сообщение в БД (ON CONFLICT обновит текст)
+        await message_service.save_message(
+            message_id=message.message_id,
+            chat_id=message.chat.id,
+            user_id=user_id,
+            username=username,
+            text=message.text,
+            timestamp=timestamp,
+            reactions={},
+            reply_to_message_id=reply_to_message_id
+        )
+        
+        logger.info(
+            f"Сообщение {message.message_id} обновлено в БД",
+            extra={"chat_id": message.chat.id}
+        )
+        
+    except Exception as e:
+        logger.error(
+            f"Ошибка обработки отредактированного сообщения: {e}",
+            extra={
+                "message_id": message.message_id if message else None,
+                "chat_id": message.chat.id if message and message.chat else None
+            },
+            exc_info=True
+        )
