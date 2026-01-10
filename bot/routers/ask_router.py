@@ -2,7 +2,7 @@
 
 import logging
 import re
-from aiogram import Router, Bot
+from aiogram import Router, Bot, F
 from aiogram.types import Message
 from aiogram.filters import Command
 from aiogram.enums import ChatType
@@ -14,6 +14,38 @@ from config.settings import Config
 
 
 logger = logging.getLogger(__name__)
+
+# Глобальная переменная для хранения username бота
+_bot_username: str = ""
+
+
+async def _get_bot_username(bot: Bot) -> str:
+    """Получить и закэшировать username бота."""
+    global _bot_username
+    if not _bot_username:
+        bot_info = await bot.get_me()
+        _bot_username = bot_info.username or ""
+    return _bot_username
+
+
+def _check_bot_mention(text: str, bot_username: str) -> tuple[bool, str]:
+    """
+    Проверить, начинается ли сообщение с упоминания бота.
+    
+    Returns:
+        Tuple (есть_упоминание, вопрос_после_упоминания)
+    """
+    if not bot_username or not text:
+        return False, ""
+    
+    mention_pattern = rf'^@{re.escape(bot_username)}\s+'
+    match = re.match(mention_pattern, text, re.IGNORECASE)
+    
+    if match:
+        question = text[match.end():].strip()
+        return True, question
+    
+    return False, ""
 
 
 async def _handle_question(
@@ -108,9 +140,6 @@ def create_ask_router(config: Config) -> Router:
     """
     router = Router(name="ask_router")
     
-    # Храним username бота для проверки упоминаний
-    bot_username: str = ""
-    
     @router.message(
         Command("ask"),
         lambda message: message.chat.type in [ChatType.GROUP, ChatType.SUPERGROUP]
@@ -176,7 +205,8 @@ def create_ask_router(config: Config) -> Router:
                 pass
     
     @router.message(
-        lambda message: message.chat.type in [ChatType.GROUP, ChatType.SUPERGROUP] and message.text
+        F.text,
+        lambda message: message.chat.type in [ChatType.GROUP, ChatType.SUPERGROUP]
     )
     async def handle_mention(
         message: Message,
@@ -199,26 +229,19 @@ def create_ask_router(config: Config) -> Router:
         """
         try:
             # Получаем username бота
-            nonlocal bot_username
-            if not bot_username:
-                bot_info = await bot.get_me()
-                bot_username = bot_info.username or ""
+            bot_username = await _get_bot_username(bot)
             
             if not bot_username:
                 return
             
             text = message.text or ""
             
-            # Проверяем, есть ли упоминание бота в начале сообщения
-            # Паттерн: @botname в начале (с возможными пробелами)
-            mention_pattern = rf'^@{re.escape(bot_username)}\s+'
-            match = re.match(mention_pattern, text, re.IGNORECASE)
+            # Проверяем упоминание бота
+            has_mention, question = _check_bot_mention(text, bot_username)
             
-            if not match:
+            if not has_mention:
+                # Не наше сообщение - пропускаем (не блокируем другие хендлеры)
                 return
-            
-            # Извлекаем вопрос после упоминания
-            question = text[match.end():].strip()
             
             if not question:
                 await message.answer(
