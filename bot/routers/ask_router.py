@@ -107,8 +107,18 @@ async def _handle_question(
         # Удаляем сообщение о обработке
         await processing_msg.delete()
         
-        # Отправляем ответ
-        await message.answer(answer, parse_mode="Markdown")
+        # Отправляем ответ с fallback при ошибке парсинга
+        try:
+            await message.answer(answer, parse_mode="Markdown")
+        except Exception as parse_error:
+            logger.warning(f"Ошибка парсинга Markdown, пробуем HTML: {parse_error}")
+            try:
+                html_answer = MessageFormatter.convert_to_html(answer)
+                await message.answer(html_answer, parse_mode="HTML")
+            except Exception as html_error:
+                logger.warning(f"Ошибка парсинга HTML, отправляем plain text: {html_error}")
+                plain_answer = MessageFormatter.strip_formatting(answer)
+                await message.answer(plain_answer)
         
         logger.info(
             "Вопрос обработан успешно",
@@ -335,8 +345,18 @@ def create_ask_router(config: Config) -> Router:
                 # Удаляем сообщение о обработке
                 await processing_msg.delete()
                 
-                # Отправляем ответ
-                await message.answer(answer, parse_mode="Markdown")
+                # Отправляем ответ с fallback при ошибке парсинга
+                try:
+                    await message.answer(answer, parse_mode="Markdown")
+                except Exception as parse_error:
+                    logger.warning(f"Ошибка парсинга Markdown, пробуем HTML: {parse_error}")
+                    try:
+                        html_answer = MessageFormatter.convert_to_html(answer)
+                        await message.answer(html_answer, parse_mode="HTML")
+                    except Exception as html_error:
+                        logger.warning(f"Ошибка парсинга HTML, отправляем plain text: {html_error}")
+                        plain_answer = MessageFormatter.strip_formatting(answer)
+                        await message.answer(plain_answer)
                 
                 logger.info(
                     "Команда /ask в личном чате выполнена",
