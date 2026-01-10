@@ -31,19 +31,21 @@ async def _get_bot_username(bot: Bot) -> str:
 
 def _check_bot_mention(text: str, bot_username: str) -> tuple[bool, str]:
     """
-    Проверить, начинается ли сообщение с упоминания бота.
+    Проверить, содержит ли сообщение упоминание бота.
     
     Returns:
-        Tuple (есть_упоминание, вопрос_после_упоминания)
+        Tuple (есть_упоминание, текст_без_упоминания)
     """
     if not bot_username or not text:
         return False, ""
     
-    mention_pattern = rf'^@{re.escape(bot_username)}\s+'
-    match = re.match(mention_pattern, text, re.IGNORECASE)
+    # Ищем упоминание в любом месте текста
+    mention_pattern = rf'@{re.escape(bot_username)}\b'
+    match = re.search(mention_pattern, text, re.IGNORECASE)
     
     if match:
-        question = text[match.end():].strip()
+        # Убираем упоминание из текста
+        question = (text[:match.start()] + text[match.end():]).strip()
         return True, question
     
     return False, ""
