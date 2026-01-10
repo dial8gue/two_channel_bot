@@ -7,6 +7,7 @@ from aiogram.types import Message
 from aiogram.filters import Command
 from aiogram.enums import ChatType
 from aiogram.dispatcher.event.bases import SkipHandler
+from aiogram.exceptions import TelegramBadRequest
 
 from services.analysis_service import AnalysisService
 from openai_client.client import OpenAIClient
@@ -15,6 +16,28 @@ from config.settings import Config
 
 
 logger = logging.getLogger(__name__)
+
+
+async def safe_reply(message: Message, text: str, parse_mode: str = None) -> Message:
+    """
+    Отправить ответ реплаем, с fallback на обычный answer если сообщение удалено.
+    
+    Args:
+        message: Исходное сообщение
+        text: Текст ответа
+        parse_mode: Режим парсинга (Markdown, HTML, None)
+        
+    Returns:
+        Отправленное сообщение
+    """
+    try:
+        return await message.reply(text, parse_mode=parse_mode)
+    except TelegramBadRequest as e:
+        # Сообщение удалено или недоступно - отправляем обычным способом
+        if "message to reply not found" in str(e).lower() or "replied message not found" in str(e).lower():
+            logger.debug(f"Исходное сообщение удалено, отправляем без реплая")
+            return await message.answer(text, parse_mode=parse_mode)
+        raise
 
 # Глобальная переменная для хранения username бота
 _bot_username: str = ""
@@ -109,18 +132,18 @@ async def _handle_question(
         # Удаляем сообщение о обработке
         await processing_msg.delete()
         
-        # Отправляем ответ с fallback при ошибке парсинга
+        # Отправляем ответ реплаем с fallback при ошибке парсинга
         try:
-            await message.answer(answer, parse_mode="Markdown")
+            await safe_reply(message, answer, parse_mode="Markdown")
         except Exception as parse_error:
             logger.warning(f"Ошибка парсинга Markdown, пробуем HTML: {parse_error}")
             try:
                 html_answer = MessageFormatter.convert_to_html(answer)
-                await message.answer(html_answer, parse_mode="HTML")
+                await safe_reply(message, html_answer, parse_mode="HTML")
             except Exception as html_error:
                 logger.warning(f"Ошибка парсинга HTML, отправляем plain text: {html_error}")
                 plain_answer = MessageFormatter.strip_formatting(answer)
-                await message.answer(plain_answer)
+                await safe_reply(message, plain_answer)
         
         logger.info(
             "Вопрос обработан успешно",
@@ -351,18 +374,18 @@ def create_ask_router(config: Config) -> Router:
                 # Удаляем сообщение о обработке
                 await processing_msg.delete()
                 
-                # Отправляем ответ с fallback при ошибке парсинга
+                # Отправляем ответ реплаем с fallback при ошибке парсинга
                 try:
-                    await message.answer(answer, parse_mode="Markdown")
+                    await safe_reply(message, answer, parse_mode="Markdown")
                 except Exception as parse_error:
                     logger.warning(f"Ошибка парсинга Markdown, пробуем HTML: {parse_error}")
                     try:
                         html_answer = MessageFormatter.convert_to_html(answer)
-                        await message.answer(html_answer, parse_mode="HTML")
+                        await safe_reply(message, html_answer, parse_mode="HTML")
                     except Exception as html_error:
                         logger.warning(f"Ошибка парсинга HTML, отправляем plain text: {html_error}")
                         plain_answer = MessageFormatter.strip_formatting(answer)
-                        await message.answer(plain_answer)
+                        await safe_reply(message, plain_answer)
                 
                 logger.info(
                     "Команда /ask в личном чате выполнена",
