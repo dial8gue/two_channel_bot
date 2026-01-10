@@ -6,7 +6,6 @@ from typing import Optional
 from aiogram import Router
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import Command
-from aiogram.exceptions import TelegramBadRequest
 from aiogram.enums import ParseMode, ChatType
 
 from bot.filters.admin_filter import IsAdminFilter
@@ -14,7 +13,7 @@ from services.analysis_service import AnalysisService
 from services.admin_service import AdminService
 from services.message_service import MessageService
 from utils.message_formatter import MessageFormatter
-from utils.telegram_sender import send_analysis_with_fallback, send_horoscope_with_fallback
+from utils.telegram_sender import send_analysis_with_fallback, send_horoscope_with_fallback, safe_reply
 from config.settings import Config
 
 
@@ -629,9 +628,9 @@ def create_admin_router(config: Config) -> Router:
                     
                     await processing_msg.delete()
                     
-                    # Send result with fallback mechanism
+                    # Send result with fallback mechanism (реплаем на исходное сообщение)
                     await send_horoscope_with_fallback(
-                        send_func=lambda text, pm: message.answer(text, parse_mode=pm),
+                        send_func=lambda text, pm: safe_reply(message, text, pm),
                         horoscope_result=horoscope_result,
                         period_hours=12,
                         from_cache=from_cache,

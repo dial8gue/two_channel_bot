@@ -3,6 +3,7 @@ Utility for sending Telegram messages with fallback formatting.
 """
 import logging
 from typing import Union, Callable, Awaitable
+from aiogram.types import Message
 from aiogram.enums import ParseMode
 from aiogram.exceptions import TelegramBadRequest
 
@@ -11,6 +12,29 @@ from config.settings import Config
 
 
 logger = logging.getLogger(__name__)
+
+
+async def safe_reply(message: Message, text: str, parse_mode = None) -> Message:
+    """
+    Отправить ответ реплаем, с fallback на обычный answer если сообщение удалено.
+    
+    Args:
+        message: Исходное сообщение
+        text: Текст ответа
+        parse_mode: Режим парсинга (ParseMode enum или None)
+        
+    Returns:
+        Отправленное сообщение
+    """
+    try:
+        logger.debug(f"Отправляем реплай на сообщение {message.message_id}")
+        return await message.reply(text, parse_mode=parse_mode)
+    except TelegramBadRequest as e:
+        # Сообщение удалено или недоступно - отправляем обычным способом
+        if "message to reply not found" in str(e).lower() or "replied message not found" in str(e).lower():
+            logger.debug(f"Исходное сообщение удалено, отправляем без реплая")
+            return await message.answer(text, parse_mode=parse_mode)
+        raise
 
 
 async def send_analysis_with_fallback(

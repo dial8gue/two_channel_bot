@@ -7,37 +7,15 @@ from aiogram.types import Message
 from aiogram.filters import Command
 from aiogram.enums import ChatType
 from aiogram.dispatcher.event.bases import SkipHandler
-from aiogram.exceptions import TelegramBadRequest
 
 from services.analysis_service import AnalysisService
 from openai_client.client import OpenAIClient
 from utils.message_formatter import MessageFormatter
+from utils.telegram_sender import safe_reply
 from config.settings import Config
 
 
 logger = logging.getLogger(__name__)
-
-
-async def safe_reply(message: Message, text: str, parse_mode: str = None) -> Message:
-    """
-    Отправить ответ реплаем, с fallback на обычный answer если сообщение удалено.
-    
-    Args:
-        message: Исходное сообщение
-        text: Текст ответа
-        parse_mode: Режим парсинга (Markdown, HTML, None)
-        
-    Returns:
-        Отправленное сообщение
-    """
-    try:
-        return await message.reply(text, parse_mode=parse_mode)
-    except TelegramBadRequest as e:
-        # Сообщение удалено или недоступно - отправляем обычным способом
-        if "message to reply not found" in str(e).lower() or "replied message not found" in str(e).lower():
-            logger.debug(f"Исходное сообщение удалено, отправляем без реплая")
-            return await message.answer(text, parse_mode=parse_mode)
-        raise
 
 # Глобальная переменная для хранения username бота
 _bot_username: str = ""
