@@ -135,7 +135,10 @@ async def handle_edited_message(message: Message, message_service: MessageServic
         
         # Используем edit_date если есть, иначе date
         edit_date = message.edit_date or message.date
-        timestamp = datetime.fromtimestamp(edit_date.timestamp())
+        if isinstance(edit_date, int):
+            timestamp = datetime.fromtimestamp(edit_date)
+        else:
+            timestamp = datetime.fromtimestamp(edit_date.timestamp())
         
         logger.debug(
             "Обработка отредактированного сообщения",
