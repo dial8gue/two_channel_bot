@@ -574,7 +574,7 @@ class OpenAIClient:
         
         # Выбираем контекст в зависимости от наличия цитаты
         if reply_timestamp and sorted_messages:
-            # Находим сообщения вокруг цитируемого (5 до и 5 после)
+            # Находим сообщения вокруг цитируемого (10 до и 10 после)
             # Ищем индекс ближайшего сообщения к timestamp цитаты
             # Приводим reply_timestamp к naive datetime для сравнения
             reply_ts_naive = reply_timestamp.replace(tzinfo=None) if reply_timestamp.tzinfo else reply_timestamp
@@ -586,9 +586,9 @@ class OpenAIClient:
                 else:
                     break
             
-            # Берём 5 сообщений до и 5 после цитируемого
-            start_idx = max(0, target_idx - 5)
-            end_idx = min(len(sorted_messages), target_idx + 6)
+            # Берём 10 сообщений до и 10 после цитируемого
+            start_idx = max(0, target_idx - 10)
+            end_idx = min(len(sorted_messages), target_idx + 11)
             recent_messages = sorted_messages[start_idx:end_idx]
             
             logger.debug(

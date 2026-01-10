@@ -285,6 +285,10 @@ def create_ask_router(config: Config) -> Router:
             )
             
             await _handle_question(message, question, analysis_service, config, is_admin)
+        
+        except SkipHandler:
+            # Нормальное поведение - сообщение не для нас, пропускаем без логирования
+            raise
                 
         except Exception as e:
             logger.error(
