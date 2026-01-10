@@ -7,6 +7,7 @@ from aiogram import Router
 from aiogram.types import Message
 from aiogram.filters import ChatMemberUpdatedFilter
 from aiogram.enums import ChatType
+from aiogram.dispatcher.event.bases import SkipHandler
 
 from services.message_service import MessageService
 
@@ -86,6 +87,12 @@ async def handle_group_message(message: Message, message_service: MessageService
         # Trigger cleanup of old messages (with debounce protection)
         await message_service.cleanup_old_messages()
         
+        # Пропускаем сообщение дальше для обработки другими хендлерами (например, @mention)
+        raise SkipHandler()
+        
+    except SkipHandler:
+        # Пробрасываем SkipHandler дальше
+        raise
     except Exception as e:
         logger.error(
             f"Error handling group message: {e}",
