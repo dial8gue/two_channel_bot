@@ -6,6 +6,7 @@ from aiogram import Router, Bot, F
 from aiogram.types import Message
 from aiogram.filters import Command
 from aiogram.enums import ChatType
+from aiogram.dispatcher.event.bases import SkipHandler
 
 from services.analysis_service import AnalysisService
 from openai_client.client import OpenAIClient
@@ -241,7 +242,7 @@ def create_ask_router(config: Config) -> Router:
             bot_username = await _get_bot_username(bot)
             
             if not bot_username:
-                return
+                raise SkipHandler()
             
             text = message.text or ""
             
@@ -249,8 +250,8 @@ def create_ask_router(config: Config) -> Router:
             has_mention, question = _check_bot_mention(text, bot_username)
             
             if not has_mention:
-                # Не наше сообщение - пропускаем (не блокируем другие хендлеры)
-                return
+                # Не наше сообщение - пропускаем к другим хендлерам
+                raise SkipHandler()
             
             if not question:
                 await message.answer(
