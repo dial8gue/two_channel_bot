@@ -446,7 +446,6 @@ class MessageFormatter:
         time_str = MessageFormatter.format_debounce_wait_time(remaining_seconds)
         
         return (
-            f"⏳ *Слишком частый запрос*\n\n"
-            f"Операция «{operation}» была выполнена недавно.\n"
-            f"Подождите еще {time_str}."
+            f"⏳ *Не так быстро, ковбой*\n\n"
+            f"Ты недавно {operation}. Подожди хотя бы {time_str}."
         )

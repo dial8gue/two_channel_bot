@@ -137,7 +137,7 @@ async def _handle_question(
         error_msg = str(e)
         try:
             remaining_seconds = float(error_msg)
-            warning_msg = MessageFormatter.format_debounce_warning("вопрос", remaining_seconds)
+            warning_msg = MessageFormatter.format_debounce_warning("задавал вопрос", remaining_seconds)
             await processing_msg.edit_text(warning_msg, parse_mode="Markdown")
         except Exception:
             await processing_msg.edit_text(f"⚠️ {error_msg}")
@@ -226,6 +226,85 @@ def create_ask_router(config: Config) -> Router:
                 await message.answer("❌ Произошла ошибка при обработке вопроса.")
             except Exception:
                 pass
+    
+    @router.message(
+        F.text,
+        F.reply_to_message,
+        lambda message: message.chat.type in [ChatType.GROUP, ChatType.SUPERGROUP]
+    )
+    async def handle_reply_to_bot(
+        message: Message,
+        bot: Bot,
+        analysis_service: AnalysisService,
+        config: Config
+    ):
+        """
+        Обработка ответа на сообщение бота.
+        
+        Использование:
+            Ответить на сообщение бота с текстом вопроса
+            
+        Args:
+            message: Сообщение-ответ
+            bot: Экземпляр бота
+            analysis_service: Сервис анализа
+            config: Конфигурация бота
+        """
+        try:
+            text = message.text or ""
+            
+            # Игнорируем команды (начинаются с /)
+            if text.startswith('/'):
+                raise SkipHandler()
+            
+            # Проверяем, что это ответ на сообщение бота
+            reply_msg = message.reply_to_message
+            bot_info = await bot.get_me()
+            
+            if not reply_msg.from_user or reply_msg.from_user.id != bot_info.id:
+                # Это ответ не на сообщение бота - пропускаем
+                raise SkipHandler()
+            
+            # Проверяем, нет ли упоминания бота (чтобы не дублировать с handle_mention)
+            bot_username = await _get_bot_username(bot)
+            if bot_username:
+                has_mention, _ = _check_bot_mention(text, bot_username)
+                if has_mention:
+                    # Есть упоминание - пусть обработает handle_mention
+                    raise SkipHandler()
+            
+            question = text.strip()
+            
+            if not question:
+                raise SkipHandler()
+            
+            # Проверяем, является ли пользователь админом
+            is_admin = message.from_user.id == config.admin_id
+            
+            logger.info(
+                "Получен ответ на сообщение бота",
+                extra={
+                    "user_id": message.from_user.id,
+                    "chat_id": message.chat.id,
+                    "is_admin": is_admin,
+                    "question_length": len(question)
+                }
+            )
+            
+            await _handle_question(message, question, analysis_service, config, is_admin)
+        
+        except SkipHandler:
+            raise
+                
+        except Exception as e:
+            logger.error(
+                f"Ошибка при обработке ответа на сообщение бота: {e}",
+                extra={
+                    "user_id": message.from_user.id if message.from_user else None,
+                    "chat_id": message.chat.id if message.chat else None
+                },
+                exc_info=True
+            )
     
     @router.message(
         F.text,

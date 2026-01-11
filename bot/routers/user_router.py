@@ -103,7 +103,7 @@ def create_user_router(config: Config) -> Router:
                 # Expected format: just a number (seconds as string)
                 try:
                     remaining_seconds = float(error_msg)
-                    warning_msg = MessageFormatter.format_debounce_warning("анализ", remaining_seconds)
+                    warning_msg = MessageFormatter.format_debounce_warning("анализировал", remaining_seconds)
                     await processing_msg.edit_text(warning_msg, parse_mode="Markdown")
                 except Exception:
                     # Fallback if parsing fails
