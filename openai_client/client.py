@@ -159,7 +159,7 @@ class OpenAIClient:
         
         Args:
             messages: List of user's messages to analyze (can be empty)
-            username: Username for personalization
+            username: Username for logging
             
         Returns:
             Horoscope result as formatted text
@@ -172,7 +172,7 @@ class OpenAIClient:
         # Гороскоп генерируется даже без сообщений - звезды всегда что-то скажут
         
         try:
-            prompt = self._build_horoscope_prompt(messages, username)
+            prompt = self._build_horoscope_prompt(messages)
             
             logger.info(
                 "Sending horoscope request to OpenAI",
@@ -317,13 +317,12 @@ class OpenAIClient:
 НАЧНИ ОТВЕТ СРАЗУ С ПЕРВОГО ПУНКТА (*1. Основные темы обсуждения* 🎭). НЕ ДОБАВЛЯЙ ВСТУПЛЕНИЙ ИЛИ ЗАКЛЮЧЕНИЙ."""
         return prompt
     
-    def _build_horoscope_prompt(self, messages: List[MessageModel], username: str) -> str:
+    def _build_horoscope_prompt(self, messages: List[MessageModel]) -> str:
         """
         Build horoscope prompt from user's messages.
         
         Args:
             messages: List of user's messages to analyze
-            username: Username for personalization
             
         Returns:
             Formatted horoscope prompt string in Russian
@@ -347,15 +346,12 @@ class OpenAIClient:
         
         messages_text = "\n".join(message_lines) if message_lines else "Сообщений нет - пользователь молчал как партизан"
         
-        # Escape username for Markdown
-        escaped_username = username.replace('_', r'\_')
-        
         # Определяем контекст для промпта
         has_messages = len(messages) > 0
         context_note = "" if has_messages else "\nВАЖНО: У пользователя нет сообщений за последний период. Составь гороскоп на основе самого факта молчания - это тоже говорит о многом!"
         
         # Build complete horoscope prompt
-        prompt = f"""Составь саркастичный гороскоп для пользователя @{escaped_username} на основе его сообщений. Используй тролинг и сарказм, но избегай прямых оскорблений личности.{context_note}
+        prompt = f"""Составь саркастичный гороскоп на основе сообщений пользователя. Используй тролинг и сарказм, но избегай прямых оскорблений личности.{context_note}
 
 СООБЩЕНИЯ ПОЛЬЗОВАТЕЛЯ:
 {messages_text}
