@@ -167,14 +167,14 @@ class OpenAIClient:
     
     async def _needs_chat_context(self, question: str, has_reply: bool) -> bool:
         """
-        Определить, нужен ли контекст чата для ответа на вопрос.
+        Determine if chat context is needed to answer the question.
         
         Args:
-            question: Вопрос пользователя
-            has_reply: Есть ли цитируемое сообщение
+            question: User's question
+            has_reply: Whether there is a quoted message
             
         Returns:
-            True если вопрос связан с чатом, False если общий вопрос
+            True if question is chat-related, False if general question
         """
         if has_reply:
             return True
@@ -216,19 +216,19 @@ class OpenAIClient:
         reply_timestamp: Optional[datetime] = None
     ) -> str:
         """
-        Ответить на вопрос пользователя на основе контекста чата.
+        Answer user's question based on chat context.
         
         Args:
-            question: Вопрос пользователя
-            messages: Список сообщений для контекста
-            reply_context: Опциональный контекст из цитируемого сообщения
-            reply_timestamp: Опциональный timestamp цитируемого сообщения для выбора контекста
+            question: User's question
+            messages: List of messages for context
+            reply_context: Optional context from quoted message
+            reply_timestamp: Optional timestamp of quoted message for context selection
             
         Returns:
-            Ответ на вопрос (максимум 5 предложений)
+            Answer to the question (max 5 sentences)
             
         Raises:
-            APIError: При ошибке OpenAI API
+            APIError: On OpenAI API error
         """
         try:
             needs_context = await self._needs_chat_context(question, reply_context is not None)
@@ -343,16 +343,16 @@ class OpenAIClient:
     
     async def answer_question_simple(self, question: str) -> str:
         """
-        Ответить на вопрос без контекста чата (для личных сообщений).
+        Answer question without chat context (for private messages).
         
         Args:
-            question: Вопрос пользователя
+            question: User's question
             
         Returns:
-            Ответ на вопрос (максимум 5 предложений)
+            Answer to the question (max 5 sentences)
             
         Raises:
-            APIError: При ошибке OpenAI API
+            APIError: On OpenAI API error
         """
         try:
             logger.info(
