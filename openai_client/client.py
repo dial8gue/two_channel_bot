@@ -8,6 +8,14 @@ from openai import AsyncOpenAI, RateLimitError, APIConnectionError
 from openai import APIError as OpenAIAPIError
 from database.models import MessageModel
 from utils.timezone_helper import format_datetime
+from .prompts import (
+    ANALYSIS_SYSTEM_PROMPT,
+    QUESTION_CLASSIFIER_SYSTEM_PROMPT,
+    QUESTION_WITH_CONTEXT_SYSTEM_PROMPT,
+    SIMPLE_QUESTION_SYSTEM_PROMPT,
+    build_analysis_user_prompt,
+    build_question_user_prompt,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -73,7 +81,8 @@ class OpenAIClient:
             return "Нет сообщений для анализа."
         
         try:
-            prompt = self._build_prompt(messages)
+            messages_text = self._format_messages_for_prompt(messages)
+            prompt = build_analysis_user_prompt(messages_text)
             
             logger.info(
                 "Sending analysis request to OpenAI",
@@ -86,29 +95,8 @@ class OpenAIClient:
             response = await self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {
-                        "role": "system",
-                        "content": r"""Ты - аналитик групповых чатов с чувством юмора.
-
-КРИТИЧЕСКИ ВАЖНЫЕ ПРАВИЛА ФОРМАТИРОВАНИЯ:
-
-1. ЗАГОЛОВКИ РАЗДЕЛОВ: ОБЯЗАТЕЛЬНО выделяй жирным шрифтом используя *текст*
-   Правильно: *1. Основные темы обсуждения* 🎭
-   Неправильно: 1. Основные темы обсуждения 🎭
-
-2. УПОМИНАНИЯ ПОЛЬЗОВАТЕЛЕЙ: ВСЕГДА ставь обратный слеш \ перед каждым подчеркиванием в username
-   Правильно: @user\_name, @test\_user\_123, @my\_cool\_name
-   Неправильно: @user_name, @test_user_123
-   ВАЖНО: Это необходимо для корректного отображения в Telegram Markdown
-   
-3. СТРУКТУРА: Строго следуй указанному формату с 4 разделами
-
-Ты ОБЯЗАН следовать этим правилам в каждом ответе."""
-                    },
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
+                    {"role": "system", "content": ANALYSIS_SYSTEM_PROMPT},
+                    {"role": "user", "content": prompt}
                 ],
                 max_tokens=self.max_tokens,
                 temperature=0.7
@@ -150,20 +138,18 @@ class OpenAIClient:
                 f"Неожиданная ошибка при анализе: {str(e)}"
             ) from e
     
-    def _build_prompt(self, messages: List[MessageModel]) -> str:
+    def _format_messages_for_prompt(self, messages: List[MessageModel]) -> str:
         """
-        Build analysis prompt from messages.
+        Format messages list into text for prompt.
         
         Args:
-            messages: List of messages to include in prompt
+            messages: List of messages to format
             
         Returns:
-            Formatted prompt string in Russian
+            Formatted messages as string
         """
-        # Sort messages by timestamp
         sorted_messages = sorted(messages, key=lambda m: m.timestamp)
         
-        # Build message list
         message_lines = []
         for msg in sorted_messages:
             timestamp_str = format_datetime(msg.timestamp, self.timezone)
@@ -173,54 +159,11 @@ class OpenAIClient:
                 reactions_list = [f"{emoji}: {count}" for emoji, count in msg.reactions.items()]
                 reactions_str = f" [Реакции: {', '.join(reactions_list)}]"
             
-            reply_str = ""
-            # if msg.reply_to_message_id:
-            #     reply_str = f" [Reply to message #{msg.reply_to_message_id}]"
-            
             message_lines.append(
-                f"[{timestamp_str}] @{msg.username}: {msg.text}{reactions_str}{reply_str}"
+                f"[{timestamp_str}] @{msg.username}: {msg.text}{reactions_str}"
             )
         
-        messages_text = "\n".join(message_lines)
-        
-        # Build complete prompt
-        prompt = f"""Проанализируй следующие сообщения из группового чата и предоставь краткую сводку.
-
-СООБЩЕНИЯ:
-{messages_text}
-
-ФОРМАТ ОТВЕТА (СТРОГО соблюдай каждую деталь):
-
-*1. Основные темы обсуждения* 🎭
-- Перечисли главные темы, о которых спорили наши герои (и насколько далеко они ушли от изначальной темы)
-- Укажи, кто был главным "экспертом" в каждой области и насколько это обоснованно
-
-*2. Самые "горячие" посты* 🔥
-- Определи сообщения, которые разожгли самые жаркие баталии
-- Укажи автора и суть его "гениального" вклада в дискуссию
-- Оцени уровень драмы по шкале от "легкого недопонимания" до "ядерной войны"
-
-*3. Короли реакций* 👑
-- Определи пользователей, чьи сообщения собрали армию эмодзи
-- Проанализируй, заслужили ли они эту славу или просто повезло
-- Отметь самые популярные реакции и что они говорят о душевном состоянии чата
-
-*4. Диагноз чата* 🏥
-- Статистика: сколько сообщений, сколько участников
-- Общий уровень токсичности и шансы на мирное разрешение конфликтов
-- Прогноз: будут ли участники еще разговаривать друг с другом завтра
-
-ПРАВИЛА ФОРМАТИРОВАНИЯ (ОБЯЗАТЕЛЬНЫ):
-1. Каждый заголовок раздела (1., 2., 3., 4.) ОБЯЗАТЕЛЬНО выделяй *жирным* как показано выше
-2. При упоминании пользователей ВСЕГДА экранируй подчеркивания обратным слешем
-   Правильно: @user\_name, @john\_doe, @test\_user\_123
-   Неправильно: @user_name, @john_doe, @test_user_123
-   КРИТИЧНО: Каждое подчеркивание должно быть с обратным слешем перед ним
-
-СТИЛЬ: Используй сарказм, зумерский язык, иронию и легкий цинизм. Будь кратким. Добавь эмодзи для драматического эффекта. Мы анализируем человеческую комедию, а не пишем научную работу.
-
-НАЧНИ ОТВЕТ СРАЗУ С ПЕРВОГО ПУНКТА (*1. Основные темы обсуждения* 🎭). НЕ ДОБАВЛЯЙ ВСТУПЛЕНИЙ ИЛИ ЗАКЛЮЧЕНИЙ."""
-        return prompt
+        return "\n".join(message_lines)
     
     async def _needs_chat_context(self, question: str, has_reply: bool) -> bool:
         """
@@ -233,7 +176,6 @@ class OpenAIClient:
         Returns:
             True если вопрос связан с чатом, False если общий вопрос
         """
-        # If there's a quote - context is definitely needed
         if has_reply:
             return True
         
@@ -241,28 +183,8 @@ class OpenAIClient:
             response = await self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {
-                        "role": "system",
-                        "content": """Определи, связан ли вопрос с обсуждением в чате или это общий вопрос.
-
-ВОПРОС СВЯЗАН С ЧАТОМ если спрашивают про:
-- Что обсуждали, о чём говорили, кто что писал
-- Конкретных участников чата или их сообщения
-- Контекст разговора, темы обсуждения
-- "Что тут происходит", "о чём речь", "кто это сказал"
-
-ОБЩИЙ ВОПРОС если спрашивают про:
-- Факты, определения, объяснения понятий
-- Погоду, время, новости
-- Советы, рекомендации общего характера
-- Любые вопросы не требующие знания истории чата
-
-Ответь ОДНИМ словом: CHAT или GENERAL"""
-                    },
-                    {
-                        "role": "user",
-                        "content": question
-                    }
+                    {"role": "system", "content": QUESTION_CLASSIFIER_SYSTEM_PROMPT},
+                    {"role": "user", "content": question}
                 ],
                 max_tokens=10,
                 temperature=0
@@ -284,7 +206,7 @@ class OpenAIClient:
             
         except Exception as e:
             logger.warning(f"Error classifying question, using context: {e}")
-            return True  # On error - safer to use context
+            return True
     
     async def answer_question(
         self,
@@ -309,19 +231,17 @@ class OpenAIClient:
             APIError: При ошибке OpenAI API
         """
         try:
-            # First determine if chat context is needed
             needs_context = await self._needs_chat_context(question, reply_context is not None)
             
             if not needs_context:
-                # General question - answer without context
                 logger.info(
                     "Question classified as general, answering without context",
                     extra={"question_length": len(question)}
                 )
                 return await self.answer_question_simple(question)
             
-            # Chat-related question - use context
-            prompt = self._build_question_prompt(question, messages, reply_context, reply_timestamp)
+            messages_text = self._get_context_messages_text(messages, reply_timestamp)
+            prompt = build_question_user_prompt(question, messages_text, reply_context)
             
             logger.info(
                 "Sending question request to OpenAI",
@@ -336,24 +256,8 @@ class OpenAIClient:
             response = await self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {
-                        "role": "system",
-                        "content": r"""Ты - ироничный ассистент группового чата с чувством юмора.
-
-ПРАВИЛА:
-1. Ответ должен быть НЕ БОЛЕЕ 5 предложений
-2. Используй предоставленный контекст чата для ответа
-3. Если вопрос связан с цитируемым сообщением - учитывай его в первую очередь
-4. При упоминании пользователей экранируй подчеркивания: @user\_name
-5. Используй иронию, сарказм и неформальный стиль общения
-6. Отвечай в стиле собеседника — если он матерится, можешь отвечать тем же
-7. Не уклоняйся от провокационных вопросов — отвечай прямо и с юмором
-8. Ты не обязан быть политкорректным"""
-                    },
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
+                    {"role": "system", "content": QUESTION_WITH_CONTEXT_SYSTEM_PROMPT},
+                    {"role": "user", "content": prompt}
                 ],
                 max_tokens=self.inline_max_tokens,
                 temperature=0.8
@@ -387,33 +291,24 @@ class OpenAIClient:
             logger.error("Unexpected error while answering question", exc_info=True)
             raise OpenAIClientError(f"Ошибка: {str(e)}") from e
     
-    def _build_question_prompt(
+    def _get_context_messages_text(
         self,
-        question: str,
         messages: List[MessageModel],
-        reply_context: Optional[str] = None,
         reply_timestamp: Optional[datetime] = None
     ) -> str:
         """
-        Построить промпт для ответа на вопрос.
+        Get formatted context messages around reply or recent messages.
         
         Args:
-            question: Вопрос пользователя
-            messages: Список сообщений для контекста
-            reply_context: Опциональный контекст из цитируемого сообщения
-            reply_timestamp: Опциональный timestamp цитируемого сообщения
+            messages: All available messages
+            reply_timestamp: Optional timestamp to center context around
             
         Returns:
-            Сформированный промпт
+            Formatted messages text
         """
-        # Sort messages by time
         sorted_messages = sorted(messages, key=lambda m: m.timestamp)
         
-        # Choose context based on quote presence
         if reply_timestamp and sorted_messages:
-            # Find messages around quoted one (10 before and 10 after)
-            # Find index of message closest to quote timestamp
-            # Convert reply_timestamp to naive datetime for comparison
             reply_ts_naive = reply_timestamp.replace(tzinfo=None) if reply_timestamp.tzinfo else reply_timestamp
             target_idx = 0
             for i, msg in enumerate(sorted_messages):
@@ -423,7 +318,6 @@ class OpenAIClient:
                 else:
                     break
             
-            # Take 10 messages before and 10 after quoted one
             start_idx = max(0, target_idx - 10)
             end_idx = min(len(sorted_messages), target_idx + 11)
             recent_messages = sorted_messages[start_idx:end_idx]
@@ -438,7 +332,6 @@ class OpenAIClient:
                 }
             )
         else:
-            # Without quote - take last 10 messages
             recent_messages = sorted_messages[-10:]
         
         message_lines = []
@@ -446,19 +339,7 @@ class OpenAIClient:
             timestamp_str = format_datetime(msg.timestamp, self.timezone)
             message_lines.append(f"[{timestamp_str}] @{msg.username}: {msg.text}")
         
-        messages_text = "\n".join(message_lines) if message_lines else "Нет сообщений в контексте"
-        
-        # Build prompt
-        prompt_parts = [f"ВОПРОС: {question}"]
-        
-        if reply_context:
-            prompt_parts.append(f"\nЦИТИРУЕМОЕ СООБЩЕНИЕ:\n{reply_context}")
-        
-        prompt_parts.append(f"\nКОНТЕКСТ ЧАТА (сообщения вокруг цитаты):\n{messages_text}")
-        
-        prompt_parts.append("\nОтветь на вопрос кратко (максимум 5 предложений), учитывая контекст чата.")
-        
-        return "\n".join(prompt_parts)
+        return "\n".join(message_lines) if message_lines else "Нет сообщений в контексте"
     
     async def answer_question_simple(self, question: str) -> str:
         """
@@ -482,19 +363,8 @@ class OpenAIClient:
             response = await self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {
-                        "role": "system",
-                        "content": """Ты - умный ассистент. Отвечай на вопросы кратко и по делу.
-
-ПРАВИЛА:
-1. Ответ должен быть НЕ БОЛЕЕ 5 предложений
-2. Будь дружелюбным, но лаконичным
-3. Если не можешь ответить на вопрос - честно скажи об этом"""
-                    },
-                    {
-                        "role": "user",
-                        "content": question
-                    }
+                    {"role": "system", "content": SIMPLE_QUESTION_SYSTEM_PROMPT},
+                    {"role": "user", "content": question}
                 ],
                 max_tokens=self.inline_max_tokens,
                 temperature=0.8
@@ -527,4 +397,3 @@ class OpenAIClient:
         except Exception as e:
             logger.error("Unexpected error while answering simple question", exc_info=True)
             raise OpenAIClientError(f"Ошибка: {str(e)}") from e
-
