@@ -1,4 +1,4 @@
-"""Роутер для обработки инлайн-вопросов к боту."""
+"""Router for handling inline questions to the bot."""
 
 import logging
 import re
@@ -17,12 +17,12 @@ from config.settings import Config
 
 logger = logging.getLogger(__name__)
 
-# Глобальная переменная для хранения username бота
+# Global variable to store bot username
 _bot_username: str = ""
 
 
 async def _get_bot_username(bot: Bot) -> str:
-    """Получить и закэшировать username бота."""
+    """Get and cache bot username."""
     global _bot_username
     if not _bot_username:
         bot_info = await bot.get_me()
@@ -32,20 +32,20 @@ async def _get_bot_username(bot: Bot) -> str:
 
 def _check_bot_mention(text: str, bot_username: str) -> tuple[bool, str]:
     """
-    Проверить, содержит ли сообщение упоминание бота.
+    Check if message contains bot mention.
     
     Returns:
-        Tuple (есть_упоминание, текст_без_упоминания)
+        Tuple (has_mention, text_without_mention)
     """
     if not bot_username or not text:
         return False, ""
     
-    # Ищем упоминание в любом месте текста
+    # Search for mention anywhere in text
     mention_pattern = rf'@{re.escape(bot_username)}\b'
     match = re.search(mention_pattern, text, re.IGNORECASE)
     
     if match:
-        # Убираем упоминание из текста
+        # Remove mention from text
         question = (text[:match.start()] + text[match.end():]).strip()
         return True, question
     
@@ -60,18 +60,18 @@ async def _handle_question(
     is_admin: bool
 ) -> None:
     """
-    Общая логика обработки вопроса.
+    Common question handling logic.
     
     Args:
-        message: Сообщение пользователя
-        question: Текст вопроса
-        analysis_service: Сервис анализа
-        config: Конфигурация бота
-        is_admin: Является ли пользователь админом
+        message: User message
+        question: Question text
+        analysis_service: Analysis service
+        config: Bot configuration
+        is_admin: Whether user is admin
     """
     from datetime import datetime, timezone
     
-    # Получаем контекст из цитируемого сообщения (если есть)
+    # Get context from quoted message (if any)
     reply_context = None
     reply_timestamp = None
     
@@ -81,11 +81,11 @@ async def _handle_question(
         reply_text = reply_msg.text or reply_msg.caption or ""
         if reply_text:
             reply_context = f"@{reply_username}: {reply_text}"
-            # Получаем timestamp цитируемого сообщения
+            # Get timestamp of quoted message
             if reply_msg.date:
                 reply_timestamp = reply_msg.date.replace(tzinfo=timezone.utc)
             logger.debug(
-                "Найден контекст цитаты",
+                "Found reply context",
                 extra={
                     "reply_user": reply_username,
                     "reply_text_length": len(reply_text),
@@ -93,11 +93,11 @@ async def _handle_question(
                 }
             )
     
-    # Показываем сообщение о обработке
+    # Show processing message
     processing_msg = await message.answer("🤔 Думаю над ответом...")
     
     try:
-        # Вызываем сервис с debounce защитой
+        # Call service with debounce protection
         answer = await analysis_service.answer_question_with_debounce(
             question=question,
             chat_id=message.chat.id,
@@ -107,24 +107,24 @@ async def _handle_question(
             bypass_debounce=is_admin
         )
         
-        # Удаляем сообщение о обработке
+        # Delete processing message
         await processing_msg.delete()
         
-        # Отправляем ответ реплаем с fallback при ошибке парсинга
+        # Send reply with fallback on parsing error
         try:
             await safe_reply(message, answer, parse_mode="Markdown")
         except Exception as parse_error:
-            logger.warning(f"Ошибка парсинга Markdown, пробуем HTML: {parse_error}")
+            logger.warning(f"Markdown parsing error, trying HTML: {parse_error}")
             try:
                 html_answer = MessageFormatter.convert_to_html(answer)
                 await safe_reply(message, html_answer, parse_mode="HTML")
             except Exception as html_error:
-                logger.warning(f"Ошибка парсинга HTML, отправляем plain text: {html_error}")
+                logger.warning(f"HTML parsing error, sending plain text: {html_error}")
                 plain_answer = MessageFormatter.strip_formatting(answer)
                 await safe_reply(message, plain_answer)
         
         logger.info(
-            "Вопрос обработан успешно",
+            "Question processed successfully",
             extra={
                 "user_id": message.from_user.id,
                 "chat_id": message.chat.id,
@@ -133,7 +133,7 @@ async def _handle_question(
         )
         
     except ValueError as e:
-        # Обработка debounce
+        # Handle debounce
         error_msg = str(e)
         try:
             remaining_seconds = float(error_msg)
@@ -143,7 +143,7 @@ async def _handle_question(
             await processing_msg.edit_text(f"⚠️ {error_msg}")
         
         logger.debug(
-            "Вопрос заблокирован debounce",
+            "Question blocked by debounce",
             extra={
                 "user_id": message.from_user.id,
                 "chat_id": message.chat.id
@@ -153,13 +153,13 @@ async def _handle_question(
 
 def create_ask_router(config: Config) -> Router:
     """
-    Создать и настроить роутер для команды /ask и упоминаний бота.
+    Create and configure router for /ask command and bot mentions.
     
     Args:
-        config: Конфигурация бота
+        config: Bot configuration
         
     Returns:
-        Настроенный экземпляр роутера
+        Configured router instance
     """
     router = Router(name="ask_router")
     
@@ -173,24 +173,24 @@ def create_ask_router(config: Config) -> Router:
         config: Config
     ):
         """
-        Обработка команды /ask для ответа на вопросы.
+        Handle /ask command for answering questions.
         
-        Использование:
-            /ask <вопрос> - задать вопрос боту
-            Ответ на сообщение с /ask <вопрос> - вопрос с контекстом цитаты
+        Usage:
+            /ask <question> - ask bot a question
+            Reply to message with /ask <question> - question with reply context
             
         Args:
-            message: Сообщение с командой
-            analysis_service: Сервис анализа
-            config: Конфигурация бота
+            message: Command message
+            analysis_service: Analysis service
+            config: Bot configuration
         """
         try:
-            # Проверяем, является ли пользователь админом
+            # Check if user is admin
             is_admin = message.from_user.id == config.admin_id
             
-            # Извлекаем вопрос из сообщения
+            # Extract question from message
             command_text = message.text or ""
-            # Убираем команду /ask из начала
+            # Remove /ask command from beginning
             question = command_text.split(maxsplit=1)[1] if len(command_text.split()) > 1 else ""
             
             if not question.strip():
@@ -202,7 +202,7 @@ def create_ask_router(config: Config) -> Router:
                 return
             
             logger.info(
-                "Получена команда /ask",
+                "Received /ask command",
                 extra={
                     "user_id": message.from_user.id,
                     "chat_id": message.chat.id,
@@ -215,7 +215,7 @@ def create_ask_router(config: Config) -> Router:
                 
         except Exception as e:
             logger.error(
-                f"Ошибка в команде /ask: {e}",
+                f"Error in /ask command: {e}",
                 extra={
                     "user_id": message.from_user.id if message.from_user else None,
                     "chat_id": message.chat.id if message.chat else None
@@ -239,38 +239,38 @@ def create_ask_router(config: Config) -> Router:
         config: Config
     ):
         """
-        Обработка ответа на сообщение бота.
+        Handle reply to bot message.
         
-        Использование:
-            Ответить на сообщение бота с текстом вопроса
+        Usage:
+            Reply to bot message with question text
             
         Args:
-            message: Сообщение-ответ
-            bot: Экземпляр бота
-            analysis_service: Сервис анализа
-            config: Конфигурация бота
+            message: Reply message
+            bot: Bot instance
+            analysis_service: Analysis service
+            config: Bot configuration
         """
         try:
             text = message.text or ""
             
-            # Игнорируем команды (начинаются с /)
+            # Ignore commands (starting with /)
             if text.startswith('/'):
                 raise SkipHandler()
             
-            # Проверяем, что это ответ на сообщение бота
+            # Check that this is reply to bot message
             reply_msg = message.reply_to_message
             bot_info = await bot.get_me()
             
             if not reply_msg.from_user or reply_msg.from_user.id != bot_info.id:
-                # Это ответ не на сообщение бота - пропускаем
+                # This is not reply to bot message - skip
                 raise SkipHandler()
             
-            # Проверяем, нет ли упоминания бота (чтобы не дублировать с handle_mention)
+            # Check if there's bot mention (to avoid duplication with handle_mention)
             bot_username = await _get_bot_username(bot)
             if bot_username:
                 has_mention, _ = _check_bot_mention(text, bot_username)
                 if has_mention:
-                    # Есть упоминание - пусть обработает handle_mention
+                    # Has mention - let handle_mention process it
                     raise SkipHandler()
             
             question = text.strip()
@@ -278,11 +278,11 @@ def create_ask_router(config: Config) -> Router:
             if not question:
                 raise SkipHandler()
             
-            # Проверяем, является ли пользователь админом
+            # Check if user is admin
             is_admin = message.from_user.id == config.admin_id
             
             logger.info(
-                "Получен ответ на сообщение бота",
+                "Received reply to bot message",
                 extra={
                     "user_id": message.from_user.id,
                     "chat_id": message.chat.id,
@@ -298,7 +298,7 @@ def create_ask_router(config: Config) -> Router:
                 
         except Exception as e:
             logger.error(
-                f"Ошибка при обработке ответа на сообщение бота: {e}",
+                f"Error handling reply to bot message: {e}",
                 extra={
                     "user_id": message.from_user.id if message.from_user else None,
                     "chat_id": message.chat.id if message.chat else None
@@ -317,36 +317,36 @@ def create_ask_router(config: Config) -> Router:
         config: Config
     ):
         """
-        Обработка упоминания бота через @username.
+        Handle bot mention via @username.
         
-        Использование:
-            @botname вопрос - задать вопрос боту
-            Ответ на сообщение с @botname вопрос - вопрос с контекстом цитаты
+        Usage:
+            @botname question - ask bot a question
+            Reply to message with @botname question - question with reply context
             
         Args:
-            message: Сообщение с упоминанием
-            bot: Экземпляр бота
-            analysis_service: Сервис анализа
-            config: Конфигурация бота
+            message: Message with mention
+            bot: Bot instance
+            analysis_service: Analysis service
+            config: Bot configuration
         """
         try:
             text = message.text or ""
             
-            # Игнорируем команды (начинаются с /)
+            # Ignore commands (starting with /)
             if text.startswith('/'):
                 raise SkipHandler()
             
-            # Получаем username бота
+            # Get bot username
             bot_username = await _get_bot_username(bot)
             
             if not bot_username:
                 raise SkipHandler()
             
-            # Проверяем упоминание бота
+            # Check bot mention
             has_mention, question = _check_bot_mention(text, bot_username)
             
             if not has_mention:
-                # Не наше сообщение - пропускаем к другим хендлерам
+                # Not our message - skip to other handlers
                 raise SkipHandler()
             
             if not question:
@@ -357,11 +357,11 @@ def create_ask_router(config: Config) -> Router:
                 )
                 return
             
-            # Проверяем, является ли пользователь админом
+            # Check if user is admin
             is_admin = message.from_user.id == config.admin_id
             
             logger.info(
-                "Получено упоминание бота",
+                "Received bot mention",
                 extra={
                     "user_id": message.from_user.id,
                     "chat_id": message.chat.id,
@@ -373,12 +373,12 @@ def create_ask_router(config: Config) -> Router:
             await _handle_question(message, question, analysis_service, config, is_admin)
         
         except SkipHandler:
-            # Нормальное поведение - сообщение не для нас, пропускаем без логирования
+            # Normal behavior - message not for us, skip without logging
             raise
                 
         except Exception as e:
             logger.error(
-                f"Ошибка при обработке упоминания: {e}",
+                f"Error handling mention: {e}",
                 extra={
                     "user_id": message.from_user.id if message.from_user else None,
                     "chat_id": message.chat.id if message.chat else None
@@ -397,15 +397,15 @@ def create_ask_router(config: Config) -> Router:
         config: Config
     ):
         """
-        Обработка команды /ask в личном чате админа (без контекста).
+        Handle /ask command in admin's private chat (without context).
         
         Args:
-            message: Сообщение с командой
-            openai_client: Клиент OpenAI
-            config: Конфигурация бота
+            message: Command message
+            openai_client: OpenAI client
+            config: Bot configuration
         """
         try:
-            # Извлекаем вопрос из сообщения
+            # Extract question from message
             command_text = message.text or ""
             question = command_text.split(maxsplit=1)[1] if len(command_text.split()) > 1 else ""
             
@@ -418,38 +418,38 @@ def create_ask_router(config: Config) -> Router:
                 return
             
             logger.info(
-                "Получена команда /ask в личном чате",
+                "Received /ask command in private chat",
                 extra={
                     "user_id": message.from_user.id,
                     "question_length": len(question)
                 }
             )
             
-            # Показываем сообщение о обработке
+            # Show processing message
             processing_msg = await message.answer("🤔 Думаю над ответом...")
             
             try:
-                # Вызываем OpenAI напрямую без контекста
+                # Call OpenAI directly without context
                 answer = await openai_client.answer_question_simple(question)
                 
-                # Удаляем сообщение о обработке
+                # Delete processing message
                 await processing_msg.delete()
                 
-                # Отправляем ответ реплаем с fallback при ошибке парсинга
+                # Send reply with fallback on parsing error
                 try:
                     await safe_reply(message, answer, parse_mode="Markdown")
                 except Exception as parse_error:
-                    logger.warning(f"Ошибка парсинга Markdown, пробуем HTML: {parse_error}")
+                    logger.warning(f"Markdown parsing error, trying HTML: {parse_error}")
                     try:
                         html_answer = MessageFormatter.convert_to_html(answer)
                         await safe_reply(message, html_answer, parse_mode="HTML")
                     except Exception as html_error:
-                        logger.warning(f"Ошибка парсинга HTML, отправляем plain text: {html_error}")
+                        logger.warning(f"HTML parsing error, sending plain text: {html_error}")
                         plain_answer = MessageFormatter.strip_formatting(answer)
                         await safe_reply(message, plain_answer)
                 
                 logger.info(
-                    "Команда /ask в личном чате выполнена",
+                    "/ask command in private chat completed",
                     extra={
                         "user_id": message.from_user.id,
                         "answer_length": len(answer)
@@ -457,12 +457,12 @@ def create_ask_router(config: Config) -> Router:
                 )
                 
             except Exception as e:
-                logger.error(f"Ошибка при генерации ответа: {e}", exc_info=True)
+                logger.error(f"Error generating answer: {e}", exc_info=True)
                 await processing_msg.edit_text("❌ Ошибка при генерации ответа.")
                 
         except Exception as e:
             logger.error(
-                f"Ошибка в команде /ask (личный чат): {e}",
+                f"Error in /ask command (private chat): {e}",
                 extra={"user_id": message.from_user.id if message.from_user else None},
                 exc_info=True
             )

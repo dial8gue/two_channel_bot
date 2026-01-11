@@ -243,7 +243,7 @@ class MessageFormatter:
         Returns:
             Formatted message(s) - single string or list if split needed
         """
-        # Конфигурация форматирования по parse_mode
+        # Formatting configuration by parse_mode
         FORMAT_CONFIG = {
             "Markdown": {"bold": ("*", "*"), "italic": ("_", "_")},
             "HTML": {"bold": ("<b>", "</b>"), "italic": ("<i>", "</i>")},
@@ -251,17 +251,17 @@ class MessageFormatter:
         }
         
         def get_format(mode: str) -> dict:
-            """Получить конфигурацию форматирования для режима."""
+            """Get formatting configuration for the specified mode."""
             return FORMAT_CONFIG.get(mode, FORMAT_CONFIG[None])
         
         def build_header(mode: str) -> str:
-            """Построить заголовок сообщения."""
+            """Build message header."""
             fmt = get_format(mode)
             b_open, b_close = fmt["bold"]
             return f"📊 {b_open}Анализ сообщений за последние {period_hours} ч{b_close}\n\n"
         
         def build_footer(mode: str) -> str:
-            """Построить футер сообщения (только для кешированных результатов)."""
+            """Build message footer (only for cached results)."""
             if not from_cache:
                 return ""
             
@@ -271,17 +271,17 @@ class MessageFormatter:
             return f"\n\n{i_open}(из кеша){i_close}"
         
         def format_content(text: str, mode: str) -> str:
-            """Форматировать контент в зависимости от режима."""
+            """Format content based on the specified mode."""
             match mode:
                 case "Markdown":
-                    return text  # LLM уже возвращает Markdown
+                    return text  # LLM already returns Markdown
                 case "HTML":
                     return MessageFormatter.convert_to_html(text)
                 case _:
                     return MessageFormatter.strip_formatting(text)
         
         def finalize_result(result: str) -> Union[str, List[str]]:
-            """Проверить длину и разбить при необходимости."""
+            """Check length and split if necessary."""
             if len(result) > max_length:
                 logger.info(f"Message exceeds {max_length} chars ({len(result)}), splitting into chunks")
                 chunks = MessageFormatter.split_long_message(result, max_length=max_length)
@@ -299,7 +299,7 @@ class MessageFormatter:
             return finalize_result(header + formatted_analysis + footer)
             
         except Exception as e:
-            # Fallback на plain text при любой ошибке
+            # Fallback to plain text on any error
             logger.error(f"Error formatting analysis result with parse_mode={parse_mode}: {e}")
             logger.info("Falling back to plain text formatting")
             
@@ -311,7 +311,7 @@ class MessageFormatter:
                 return finalize_result(header + plain_analysis + footer)
                 
             except Exception as fallback_error:
-                # Крайний fallback - минимальное безопасное сообщение
+                # Ultimate fallback - minimal safe message
                 logger.error(f"Error in fallback formatting: {fallback_error}")
                 safe_length = max_length - 96
                 prefix = f"📊 Анализ за {period_hours} ч"
@@ -329,7 +329,7 @@ class MessageFormatter:
         Returns:
             Formatted statistics message with Markdown
         """
-        # Конфигурация полей статистики: (ключ, emoji, шаблон, требует_значение)
+        # Statistics fields configuration: (key, emoji, template, requires_value)
         STATS_FIELDS = [
             ('total_messages', '📝', 'Всего сообщений: *{value}*', False),
             ('oldest_message', '📅', 'Самое старое сообщение: {value}', True),
@@ -345,7 +345,7 @@ class MessageFormatter:
                 if key in stats and (not requires_value or stats[key]):
                     message_parts.append(f"{emoji} {template.format(value=stats[key])}")
             
-            # Особый случай для collection_enabled (булево значение с кастомным форматом)
+            # Special case for collection_enabled (boolean value with custom format)
             if 'collection_enabled' in stats:
                 status = "✅ Включен" if stats['collection_enabled'] else "❌ Выключен"
                 message_parts.append(f"🔄 Сбор сообщений: {status}")
@@ -446,6 +446,6 @@ class MessageFormatter:
         time_str = MessageFormatter.format_debounce_wait_time(remaining_seconds)
         
         return (
-            f"⏳ *Не так быстро, ковбой*\n\n"
+            f"⏳ *Не так быстро, ковбой*\n"
             f"Ты недавно {operation}. Подожди хотя бы {time_str}."
         )

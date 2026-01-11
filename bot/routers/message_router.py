@@ -87,11 +87,11 @@ async def handle_group_message(message: Message, message_service: MessageService
         # Trigger cleanup of old messages (with debounce protection)
         await message_service.cleanup_old_messages()
         
-        # Пропускаем сообщение дальше для обработки другими хендлерами (например, @mention)
+        # Skip message for processing by other handlers (e.g., @mention)
         raise SkipHandler()
         
     except SkipHandler:
-        # Пробрасываем SkipHandler дальше
+        # Re-raise SkipHandler to continue processing
         raise
     except Exception as e:
         logger.error(
@@ -111,14 +111,18 @@ async def handle_group_message(message: Message, message_service: MessageService
 )
 async def handle_edited_message(message: Message, message_service: MessageService):
     """
-    Обработка отредактированных сообщений в групповых чатах.
+    Handle edited messages in group chats.
     
-    Обновляет текст сообщения в базе данных.
+    Updates message text in the database.
+    
+    Args:
+        message: Edited message from Telegram
+        message_service: Service for message operations
     """
     try:
         if not message.text:
             logger.debug(
-                "Пропуск отредактированного сообщения без текста",
+                "Skipping edited message without text",
                 extra={
                     "message_id": message.message_id,
                     "chat_id": message.chat.id
@@ -133,7 +137,7 @@ async def handle_edited_message(message: Message, message_service: MessageServic
         if message.reply_to_message:
             reply_to_message_id = message.reply_to_message.message_id
         
-        # Используем edit_date если есть, иначе date
+        # Use edit_date if available, otherwise use date
         edit_date = message.edit_date or message.date
         if isinstance(edit_date, int):
             timestamp = datetime.fromtimestamp(edit_date)
@@ -141,7 +145,7 @@ async def handle_edited_message(message: Message, message_service: MessageServic
             timestamp = datetime.fromtimestamp(edit_date.timestamp())
         
         logger.debug(
-            "Обработка отредактированного сообщения",
+            "Processing edited message",
             extra={
                 "message_id": message.message_id,
                 "chat_id": message.chat.id,
@@ -151,7 +155,7 @@ async def handle_edited_message(message: Message, message_service: MessageServic
             }
         )
         
-        # Сохраняем/обновляем сообщение в БД (ON CONFLICT обновит текст)
+        # Save/update message in database (ON CONFLICT will update text)
         await message_service.save_message(
             message_id=message.message_id,
             chat_id=message.chat.id,
@@ -164,13 +168,13 @@ async def handle_edited_message(message: Message, message_service: MessageServic
         )
         
         logger.info(
-            f"Сообщение {message.message_id} обновлено в БД",
+            f"Message {message.message_id} updated in database",
             extra={"chat_id": message.chat.id}
         )
         
     except Exception as e:
         logger.error(
-            f"Ошибка обработки отредактированного сообщения: {e}",
+            f"Error handling edited message: {e}",
             extra={
                 "message_id": message.message_id if message else None,
                 "chat_id": message.chat.id if message and message.chat else None

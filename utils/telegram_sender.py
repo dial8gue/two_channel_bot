@@ -27,12 +27,12 @@ async def safe_reply(message: Message, text: str, parse_mode = None) -> Message:
         Отправленное сообщение
     """
     try:
-        logger.debug(f"Отправляем реплай на сообщение {message.message_id}")
+        logger.debug(f"Sending reply to message {message.message_id}")
         return await message.reply(text, parse_mode=parse_mode)
     except TelegramBadRequest as e:
-        # Сообщение удалено или недоступно - отправляем обычным способом
+        # Message deleted or unavailable - send normally
         if "message to reply not found" in str(e).lower() or "replied message not found" in str(e).lower():
-            logger.debug(f"Исходное сообщение удалено, отправляем без реплая")
+            logger.debug(f"Original message deleted, sending without reply")
             return await message.answer(text, parse_mode=parse_mode)
         raise
 

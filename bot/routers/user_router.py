@@ -78,7 +78,7 @@ def create_user_router(config: Config) -> Router:
                 # Delete processing message
                 await processing_msg.delete()
                 
-                # Send result with fallback mechanism (реплаем на исходное сообщение)
+                # Send result with fallback mechanism (reply to original message)
                 await send_analysis_with_fallback(
                     send_func=lambda text, pm: safe_reply(message, text, pm),
                     analysis_result=result,

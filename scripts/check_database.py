@@ -1,17 +1,17 @@
-"""Скрипт для проверки состояния базы данных."""
+"""Script for checking database state."""
 import sqlite3
 import sys
 from pathlib import Path
 
-# Добавляем корневую директорию в путь
+# Add root directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from config.settings import Config
 
 
 def check_database():
-    """Проверка состояния БД."""
-    # Загрузка конфигурации
+    """Check database state."""
+    # Load configuration
     try:
         config = Config.from_env()
         db_path = config.db_path
@@ -20,7 +20,7 @@ def check_database():
         print("Используется путь по умолчанию: /app/data/bot.db")
         db_path = "/app/data/bot.db"
     
-    # Проверка существования БД
+    # Check database existence
     if not Path(db_path).exists():
         print(f"❌ База данных не найдена: {db_path}")
         print("\nСоздайте БД, запустив бота:")
@@ -29,16 +29,16 @@ def check_database():
     
     print(f"✅ База данных найдена: {db_path}\n")
     
-    # Подключение к БД
+    # Connect to database
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     
-    # Проверка таблиц
+    # Check tables
     cursor.execute('SELECT name FROM sqlite_master WHERE type="table"')
     tables = [row[0] for row in cursor.fetchall()]
     print(f"📋 Таблицы в БД: {', '.join(tables)}\n")
     
-    # Проверка количества записей
+    # Check record counts
     cursor.execute('SELECT COUNT(*) FROM messages')
     messages_count = cursor.fetchone()[0]
     
@@ -58,7 +58,7 @@ def check_database():
     print(f"  Debounce записей: {debounce_count}")
     print()
     
-    # Если есть сообщения, показать последние
+    # If there are messages, show recent ones
     if messages_count > 0:
         cursor.execute('''
             SELECT message_id, chat_id, username, 
@@ -85,7 +85,7 @@ def check_database():
         print("  - Бот запущен: python -m bot.main")
         print()
     
-    # Если есть кеш, показать записи
+    # If there is cache, show entries
     if cache_count > 0:
         cursor.execute('''
             SELECT substr(key, 1, 50) as key_preview, 
@@ -101,7 +101,7 @@ def check_database():
             print(f"    Создан: {row[1]}, Истекает: {row[2]}")
         print()
     
-    # Показать настройки
+    # Show settings
     if config_count > 0:
         cursor.execute('SELECT key, value FROM config')
         print("⚙️  Настройки:")

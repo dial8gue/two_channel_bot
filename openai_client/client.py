@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 class OpenAIClientError(Exception):
-    """Ошибка клиента OpenAI."""
+    """OpenAI client error."""
     pass
 
 
@@ -175,7 +175,7 @@ class OpenAIClient:
             
             reply_str = ""
             # if msg.reply_to_message_id:
-            #     reply_str = f" [Ответ на сообщение #{msg.reply_to_message_id}]"
+            #     reply_str = f" [Reply to message #{msg.reply_to_message_id}]"
             
             message_lines.append(
                 f"[{timestamp_str}] @{msg.username}: {msg.text}{reactions_str}{reply_str}"
@@ -233,7 +233,7 @@ class OpenAIClient:
         Returns:
             True если вопрос связан с чатом, False если общий вопрос
         """
-        # Если есть цитата — контекст точно нужен
+        # If there's a quote - context is definitely needed
         if has_reply:
             return True
         
@@ -272,7 +272,7 @@ class OpenAIClient:
             needs_context = "CHAT" in result
             
             logger.debug(
-                "Классификация вопроса",
+                "Question classification",
                 extra={
                     "question": question[:50],
                     "classification": result,
@@ -283,8 +283,8 @@ class OpenAIClient:
             return needs_context
             
         except Exception as e:
-            logger.warning(f"Ошибка классификации вопроса, используем контекст: {e}")
-            return True  # При ошибке — безопаснее использовать контекст
+            logger.warning(f"Error classifying question, using context: {e}")
+            return True  # On error - safer to use context
     
     async def answer_question(
         self,
@@ -309,22 +309,22 @@ class OpenAIClient:
             APIError: При ошибке OpenAI API
         """
         try:
-            # Сначала определяем, нужен ли контекст чата
+            # First determine if chat context is needed
             needs_context = await self._needs_chat_context(question, reply_context is not None)
             
             if not needs_context:
-                # Общий вопрос — отвечаем без контекста
+                # General question - answer without context
                 logger.info(
-                    "Вопрос классифицирован как общий, отвечаем без контекста",
+                    "Question classified as general, answering without context",
                     extra={"question_length": len(question)}
                 )
                 return await self.answer_question_simple(question)
             
-            # Вопрос про чат — используем контекст
+            # Chat-related question - use context
             prompt = self._build_question_prompt(question, messages, reply_context, reply_timestamp)
             
             logger.info(
-                "Отправка запроса на ответ вопроса в OpenAI",
+                "Sending question request to OpenAI",
                 extra={
                     "question_length": len(question),
                     "message_count": len(messages),
@@ -362,7 +362,7 @@ class OpenAIClient:
             answer = response.choices[0].message.content
             
             logger.info(
-                "Ответ на вопрос получен",
+                "Question answer received",
                 extra={
                     "tokens_used": response.usage.total_tokens,
                     "response_length": len(answer) if answer else 0
@@ -372,19 +372,19 @@ class OpenAIClient:
             return answer or "Не удалось сформировать ответ."
             
         except RateLimitError as e:
-            logger.error("Превышен лимит запросов OpenAI", exc_info=True)
+            logger.error("OpenAI rate limit exceeded", exc_info=True)
             raise OpenAIClientError("Превышен лимит запросов. Попробуйте позже.") from e
             
         except APIConnectionError as e:
-            logger.error("Ошибка подключения к OpenAI API", exc_info=True)
+            logger.error("OpenAI API connection error", exc_info=True)
             raise OpenAIClientError("Не удалось подключиться к API.") from e
             
         except OpenAIAPIError as e:
-            logger.error("Ошибка OpenAI API", exc_info=True)
+            logger.error("OpenAI API error", exc_info=True)
             raise OpenAIClientError(f"Ошибка API: {str(e)}") from e
             
         except Exception as e:
-            logger.error("Неожиданная ошибка при ответе на вопрос", exc_info=True)
+            logger.error("Unexpected error while answering question", exc_info=True)
             raise OpenAIClientError(f"Ошибка: {str(e)}") from e
     
     def _build_question_prompt(
@@ -406,14 +406,14 @@ class OpenAIClient:
         Returns:
             Сформированный промпт
         """
-        # Сортируем сообщения по времени
+        # Sort messages by time
         sorted_messages = sorted(messages, key=lambda m: m.timestamp)
         
-        # Выбираем контекст в зависимости от наличия цитаты
+        # Choose context based on quote presence
         if reply_timestamp and sorted_messages:
-            # Находим сообщения вокруг цитируемого (10 до и 10 после)
-            # Ищем индекс ближайшего сообщения к timestamp цитаты
-            # Приводим reply_timestamp к naive datetime для сравнения
+            # Find messages around quoted one (10 before and 10 after)
+            # Find index of message closest to quote timestamp
+            # Convert reply_timestamp to naive datetime for comparison
             reply_ts_naive = reply_timestamp.replace(tzinfo=None) if reply_timestamp.tzinfo else reply_timestamp
             target_idx = 0
             for i, msg in enumerate(sorted_messages):
@@ -423,13 +423,13 @@ class OpenAIClient:
                 else:
                     break
             
-            # Берём 10 сообщений до и 10 после цитируемого
+            # Take 10 messages before and 10 after quoted one
             start_idx = max(0, target_idx - 10)
             end_idx = min(len(sorted_messages), target_idx + 11)
             recent_messages = sorted_messages[start_idx:end_idx]
             
             logger.debug(
-                "Контекст вокруг цитируемого сообщения",
+                "Context around quoted message",
                 extra={
                     "target_idx": target_idx,
                     "start_idx": start_idx,
@@ -438,7 +438,7 @@ class OpenAIClient:
                 }
             )
         else:
-            # Без цитаты — берём последние 10 сообщений
+            # Without quote - take last 10 messages
             recent_messages = sorted_messages[-10:]
         
         message_lines = []
@@ -448,7 +448,7 @@ class OpenAIClient:
         
         messages_text = "\n".join(message_lines) if message_lines else "Нет сообщений в контексте"
         
-        # Формируем промпт
+        # Build prompt
         prompt_parts = [f"ВОПРОС: {question}"]
         
         if reply_context:
@@ -475,7 +475,7 @@ class OpenAIClient:
         """
         try:
             logger.info(
-                "Отправка простого вопроса в OpenAI",
+                "Sending simple question to OpenAI",
                 extra={"question_length": len(question)}
             )
             
@@ -503,7 +503,7 @@ class OpenAIClient:
             answer = response.choices[0].message.content
             
             logger.info(
-                "Ответ на простой вопрос получен",
+                "Simple question answer received",
                 extra={
                     "tokens_used": response.usage.total_tokens,
                     "response_length": len(answer) if answer else 0
@@ -513,18 +513,18 @@ class OpenAIClient:
             return answer or "Не удалось сформировать ответ."
             
         except RateLimitError as e:
-            logger.error("Превышен лимит запросов OpenAI", exc_info=True)
+            logger.error("OpenAI rate limit exceeded", exc_info=True)
             raise OpenAIClientError("Превышен лимит запросов. Попробуйте позже.") from e
             
         except APIConnectionError as e:
-            logger.error("Ошибка подключения к OpenAI API", exc_info=True)
+            logger.error("OpenAI API connection error", exc_info=True)
             raise OpenAIClientError("Не удалось подключиться к API.") from e
             
         except OpenAIAPIError as e:
-            logger.error("Ошибка OpenAI API", exc_info=True)
+            logger.error("OpenAI API error", exc_info=True)
             raise OpenAIClientError(f"Ошибка API: {str(e)}") from e
             
         except Exception as e:
-            logger.error("Неожиданная ошибка при ответе на вопрос", exc_info=True)
+            logger.error("Unexpected error while answering simple question", exc_info=True)
             raise OpenAIClientError(f"Ошибка: {str(e)}") from e
 

@@ -241,29 +241,29 @@ class AnalysisService:
         bypass_debounce: bool = False
     ) -> str:
         """
-        Ответить на вопрос пользователя с защитой от спама (debounce).
+        Answer user question with spam protection (debounce).
         
         Args:
-            question: Вопрос пользователя
-            chat_id: ID чата для получения контекста
-            user_id: ID пользователя для debounce
-            reply_context: Опциональный контекст из цитируемого сообщения
-            reply_timestamp: Опциональный timestamp цитируемого сообщения для выбора контекста
-            bypass_debounce: Пропустить проверку debounce (для админа)
+            question: User question
+            chat_id: Chat ID for context retrieval
+            user_id: User ID for debounce
+            reply_context: Optional context from quoted message
+            reply_timestamp: Optional timestamp of quoted message for context selection
+            bypass_debounce: Skip debounce check (for admin)
             
         Returns:
-            Ответ на вопрос
+            Answer to the question
             
         Raises:
-            ValueError: Если сработал debounce, с оставшимся временем в секундах
-            Exception: При ошибке генерации ответа
+            ValueError: If debounced, with remaining time in seconds
+            Exception: If answer generation fails
         """
         try:
-            # Формируем ключ операции для debounce (per user per chat)
+            # Format operation key for debounce (per user per chat)
             operation_key = f"{self.INLINE_OPERATION}:{user_id}:{chat_id}"
             
             logger.info(
-                "Начало обработки инлайн-вопроса",
+                "Starting inline question processing",
                 extra={
                     "operation_key": operation_key,
                     "user_id": user_id,
@@ -275,7 +275,7 @@ class AnalysisService:
                 }
             )
             
-            # Проверяем debounce (если не админ)
+            # Check debounce (if not admin)
             if not bypass_debounce:
                 can_execute, remaining = await self.debounce_manager.can_execute(
                     operation=operation_key,
@@ -284,7 +284,7 @@ class AnalysisService:
                 
                 if not can_execute:
                     logger.warning(
-                        "Инлайн-вопрос заблокирован debounce",
+                        "Inline question blocked by debounce",
                         extra={
                             "operation_key": operation_key,
                             "user_id": user_id,
@@ -293,27 +293,27 @@ class AnalysisService:
                     )
                     raise ValueError(f"{remaining}")
                 
-                # Отмечаем выполнение операции сразу после проверки
+                # Mark operation as executed immediately after check
                 await self.debounce_manager.mark_executed(operation_key)
                 logger.debug(
-                    "Операция отмечена как выполненная для debounce",
+                    "Operation marked as executed for debounce",
                     extra={"operation_key": operation_key}
                 )
             else:
                 logger.debug(
-                    "Пропуск проверки debounce для админа",
+                    "Bypassing debounce check for admin",
                     extra={"user_id": user_id, "operation_key": operation_key}
                 )
             
-            # Получаем контекст сообщений (последние 6 часов)
+            # Get message context (last 6 hours)
             start_time = datetime.now() - timedelta(hours=6)
             messages = await self.message_repository.get_by_period(
                 start_time=start_time,
                 chat_id=chat_id
             )
             
-            # Генерируем ответ через OpenAI
-            logger.info("Генерация ответа через OpenAI")
+            # Generate answer via OpenAI
+            logger.info("Generating answer via OpenAI")
             answer = await self.openai_client.answer_question(
                 question=question,
                 messages=messages,
@@ -322,7 +322,7 @@ class AnalysisService:
             )
             
             logger.info(
-                "Ответ на вопрос сгенерирован",
+                "Question answer generated",
                 extra={
                     "user_id": user_id,
                     "chat_id": chat_id,
@@ -338,7 +338,7 @@ class AnalysisService:
             raise
         except Exception as e:
             logger.error(
-                f"Ошибка при ответе на вопрос: {e}",
+                f"Error answering question: {e}",
                 extra={
                     "user_id": user_id,
                     "chat_id": chat_id,

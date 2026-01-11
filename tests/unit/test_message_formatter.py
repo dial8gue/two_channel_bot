@@ -774,8 +774,8 @@ class TestFormatAnalysisResult:
     def test_format_exactly_at_length_boundary(self):
         """Test formatting when result is exactly at max_length boundary."""
         # Calculate how much content we need to reach exactly 4096 chars
-        # Header: "📊 *Анализ сообщений за последние 24 ч*\n\n"
-        # Footer: "\n\n_Анализ выполнен роботами_"
+        # Header: "📊 *Message analysis for last 24 h*\n\n"
+        # Footer: "\n\n_Analysis performed by robots_"
         # We need to account for escaping, so use plain text mode
         
         header_len = len("📊 Анализ сообщений за последние 24 ч\n\n")

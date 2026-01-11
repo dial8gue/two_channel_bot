@@ -171,7 +171,7 @@ async def main() -> None:
         user_router = create_user_router(config)
         dp.include_router(user_router)
         
-        # Ask router должен быть последним - он ловит все текстовые сообщения
+        # Ask router should be last - it catches all text messages
         ask_router = create_ask_router(config)
         dp.include_router(ask_router)
         

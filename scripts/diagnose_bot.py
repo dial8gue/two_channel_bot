@@ -1,10 +1,10 @@
-"""Диагностический скрипт для проверки получения сообщений ботом."""
+"""Diagnostic script for checking bot message reception."""
 import asyncio
 import logging
 import sys
 from pathlib import Path
 
-# Добавляем корневую директорию в путь
+# Add root directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from aiogram import Bot, Dispatcher, Router
@@ -13,20 +13,20 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from config.settings import Config
 
-# Настройка логирования
+# Setup logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
 
-# Создание роутера
+# Create router
 router = Router()
 
 
 @router.message()
 async def debug_all_messages(message: Message):
-    """Обработчик всех сообщений для диагностики."""
+    """Handler for all messages for diagnostics."""
     print("\n" + "=" * 70)
     print("📨 ПОЛУЧЕНО СООБЩЕНИЕ")
     print("=" * 70)
@@ -46,7 +46,7 @@ async def debug_all_messages(message: Message):
     else:
         print(f"Текст:           [Нет текста]")
     
-    # Проверка, будет ли сообщение обработано основным хендлером
+    # Check if message will be processed by main handler
     from aiogram.enums import ChatType
     is_group = message.chat.type in [ChatType.GROUP, ChatType.SUPERGROUP]
     
@@ -61,12 +61,12 @@ async def debug_all_messages(message: Message):
 
 
 async def main():
-    """Запуск диагностического бота."""
+    """Launch diagnostic bot."""
     print("\n" + "=" * 70)
     print("🔍 ДИАГНОСТИЧЕСКИЙ РЕЖИМ БОТА")
     print("=" * 70)
     
-    # Загрузка конфигурации
+    # Load configuration
     try:
         config = Config.from_env()
         print(f"✅ Конфигурация загружена")
@@ -77,7 +77,7 @@ async def main():
         print(f"❌ Ошибка загрузки конфигурации: {e}")
         return
     
-    # Создание бота и диспетчера
+    # Create bot and dispatcher
     try:
         bot = Bot(
             token=config.bot_token,
