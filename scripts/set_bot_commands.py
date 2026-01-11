@@ -36,9 +36,10 @@ async def set_commands():
             print(f"   ⚠️  BotCommandScopeChat: {e}")
         
         # Commands for all group chats (available to all users)
+        # NOTE: /horoscope временно отключена для доработки
         group_commands = [
             BotCommand(command="anal", description="Анализ сообщений (8 часов)"),
-            BotCommand(command="horoscope", description="Гороскоп на основе сообщений"),
+            # BotCommand(command="horoscope", description="Гороскоп на основе сообщений"),
             BotCommand(command="ask", description="Задать вопрос боту"),
         ]
         
