@@ -33,8 +33,7 @@ class AnalysisService:
         debounce_interval_seconds: int,
         cache_ttl_minutes: int,
         analysis_period_hours: int,
-        inline_debounce_seconds: int = 3600,
-        horoscope_debounce_seconds: int = 3600
+        inline_debounce_seconds: int = 3600
     ):
         """
         Initialize analysis service.
@@ -48,7 +47,6 @@ class AnalysisService:
             cache_ttl_minutes: Time to live for cached results
             analysis_period_hours: Default analysis period in hours
             inline_debounce_seconds: Minimum interval between inline questions for users
-            horoscope_debounce_seconds: Minimum interval between horoscope requests for users
         """
         self.message_repository = message_repository
         self.openai_client = openai_client
@@ -58,7 +56,6 @@ class AnalysisService:
         self.cache_ttl_minutes = cache_ttl_minutes
         self.analysis_period_hours = analysis_period_hours
         self.inline_debounce_seconds = inline_debounce_seconds
-        self.horoscope_debounce_seconds = horoscope_debounce_seconds
     
     async def analyze_messages_with_debounce(
         self,
@@ -193,138 +190,6 @@ class AnalysisService:
                     "operation_type": operation_type,
                     "chat_id": chat_id,
                     "user_id": user_id,
-                    "hours": hours
-                },
-                exc_info=True
-            )
-            raise
-    
-    async def create_horoscope_with_debounce(
-        self,
-        user_id: int,
-        username: str,
-        chat_id: int,
-        hours: int = 12,
-        bypass_debounce: bool = False
-    ) -> tuple[str, bool]:
-        """
-        Create horoscope for user with debounce protection.
-        
-        Args:
-            user_id: User ID to create horoscope for
-            username: Username for personalization
-            chat_id: Chat ID for debounce tracking
-            hours: Analysis period in hours (default 12)
-            bypass_debounce: If True, skip debounce check (for admin users)
-            
-        Returns:
-            Tuple of (horoscope_result, from_cache) where:
-                - horoscope_result: The horoscope text
-                - from_cache: True if result was from cache, False if new analysis
-                
-        Raises:
-            ValueError: If debounced, with remaining time in seconds in the message
-            Exception: If horoscope creation fails
-        """
-        try:
-            # Format operation key as "horoscope:{user_id}:{chat_id}"
-            operation_key = f"horoscope:{user_id}:{chat_id}"
-            
-            logger.info(
-                "Starting horoscope creation with debounce",
-                extra={
-                    "operation_key": operation_key,
-                    "user_id": user_id,
-                    "username": username,
-                    "chat_id": chat_id,
-                    "hours": hours,
-                    "bypass_debounce": bypass_debounce
-                }
-            )
-            
-            # Get user's messages from the specified period
-            start_time = datetime.now() - timedelta(hours=hours)
-            messages = await self.message_repository.get_by_user_and_period(
-                user_id=user_id,
-                start_time=start_time,
-                chat_id=chat_id
-            )
-            
-            # Generate cache key and check cache (даже для пустых сообщений)
-            cache_key = self._generate_horoscope_cache_key(messages, user_id, username)
-            cached_result = await self.cache_manager.get(cache_key)
-            
-            if cached_result:
-                # Return cached result without debounce check/set
-                logger.info("Returning cached horoscope result (no debounce applied)")
-                return cached_result, True
-            
-            # No cache hit - check and set debounce before making API call
-            if not bypass_debounce:
-                can_execute, remaining = await self.debounce_manager.can_execute(
-                    operation=operation_key,
-                    interval_seconds=self.horoscope_debounce_seconds
-                )
-                
-                if not can_execute:
-                    logger.warning(
-                        f"Horoscope blocked by debounce",
-                        extra={
-                            "operation_key": operation_key,
-                            "user_id": user_id,
-                            "remaining_seconds": remaining
-                        }
-                    )
-                    raise ValueError(f"{remaining}")
-                
-                # Mark operation as executed IMMEDIATELY after check passes
-                await self.debounce_manager.mark_executed(operation_key)
-                logger.debug(
-                    f"Marked horoscope operation as executed for debounce",
-                    extra={"operation_key": operation_key}
-                )
-            else:
-                logger.debug(
-                    "Bypassing horoscope debounce check",
-                    extra={"user_id": user_id, "operation_key": operation_key}
-                )
-            
-            # Create horoscope with OpenAI
-            logger.info("Creating horoscope with OpenAI")
-            horoscope_result = await self.openai_client.create_horoscope(messages, username)
-            
-            # Cache the result
-            await self.cache_manager.set(
-                key=cache_key,
-                value=horoscope_result,
-                ttl_minutes=self.cache_ttl_minutes
-            )
-            
-            from_cache = False
-            
-            logger.info(
-                "Horoscope creation completed",
-                extra={
-                    "operation_key": operation_key,
-                    "user_id": user_id,
-                    "username": username,
-                    "from_cache": from_cache,
-                    "message_count": len(messages)
-                }
-            )
-            
-            return horoscope_result, from_cache
-            
-        except ValueError:
-            # Re-raise debounce errors
-            raise
-        except Exception as e:
-            logger.error(
-                f"Failed to create horoscope with debounce: {e}",
-                extra={
-                    "user_id": user_id,
-                    "username": username,
-                    "chat_id": chat_id,
                     "hours": hours
                 },
                 exc_info=True
@@ -535,49 +400,3 @@ class AnalysisService:
             logger.error(f"Error generating cache key: {e}", exc_info=True)
             # Return a timestamp-based key as fallback (won't cache effectively)
             return f"fallback_{datetime.now().isoformat()}"
-    
-    def _generate_horoscope_cache_key(self, messages: List[MessageModel], user_id: int, username: str) -> str:
-        """
-        Generate a cache key for horoscope based on user's messages.
-        
-        Args:
-            messages: List of user's messages (can be empty)
-            user_id: User ID
-            username: Username for additional uniqueness
-            
-        Returns:
-            SHA256 hash string to use as cache key
-        """
-        try:
-            # Sort messages by ID for consistent ordering
-            sorted_messages = sorted(messages, key=lambda m: (m.chat_id, m.message_id))
-            
-            # Build a string representation of user's messages
-            message_data = []
-            for msg in sorted_messages:
-                # Include message ID, text, and reaction summary
-                reaction_summary = json.dumps(msg.reactions, sort_keys=True)
-                message_data.append(
-                    f"{msg.chat_id}:{msg.message_id}:{msg.text}:{reaction_summary}"
-                )
-            
-            # Create hash including user info and messages (или "no_messages" если пусто)
-            messages_part = "|".join(message_data) if message_data else "no_messages"
-            combined = f"horoscope:{user_id}:{username}:{messages_part}"
-            cache_key = hashlib.sha256(combined.encode('utf-8')).hexdigest()
-            
-            logger.debug(
-                f"Generated horoscope cache key for user {username}",
-                extra={
-                    "cache_key": cache_key[:16] + "...",
-                    "user_id": user_id,
-                    "message_count": len(messages)
-                }
-            )
-            
-            return cache_key
-            
-        except Exception as e:
-            logger.error(f"Error generating horoscope cache key: {e}", exc_info=True)
-            # Return a timestamp-based key as fallback
-            return f"horoscope_fallback_{user_id}_{datetime.now().isoformat()}"

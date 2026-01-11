@@ -224,9 +224,7 @@ class MessageFormatter:
         period_hours: int, 
         from_cache: bool = False,
         parse_mode: str = "Markdown",
-        max_length: int = 4096,
-        analysis_type: str = "analysis",
-        username: str = None
+        max_length: int = 4096
     ) -> Union[str, List[str]]:
         """
         Format analysis result with robust error handling.
@@ -241,8 +239,6 @@ class MessageFormatter:
             from_cache: Whether the result was retrieved from cache
             parse_mode: Preferred parse mode ("Markdown", "HTML", or None)
             max_length: Maximum message length (default 4096)
-            analysis_type: Type of analysis ("analysis" or "horoscope")
-            username: Username for horoscope header (only used for horoscope type)
             
         Returns:
             Formatted message(s) - single string or list if split needed
@@ -262,17 +258,6 @@ class MessageFormatter:
             """Построить заголовок сообщения."""
             fmt = get_format(mode)
             b_open, b_close = fmt["bold"]
-            
-            if analysis_type == "horoscope":
-                if username:
-                    # Экранирование username для HTML
-                    safe_username = (
-                        username.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-                        if mode == "HTML" else username
-                    )
-                    return f"🔮 {b_open}Гороскоп для @{safe_username}{b_close}\n\n"
-                return f"🔮 {b_open}Гороскоп по сообщениям за {period_hours} ч{b_close}\n\n"
-            
             return f"📊 {b_open}Анализ сообщений за последние {period_hours} ч{b_close}\n\n"
         
         def build_footer(mode: str) -> str:
@@ -329,11 +314,7 @@ class MessageFormatter:
                 # Крайний fallback - минимальное безопасное сообщение
                 logger.error(f"Error in fallback formatting: {fallback_error}")
                 safe_length = max_length - 96
-                
-                if analysis_type == "horoscope":
-                    prefix = f"🔮 Гороскоп для @{username}" if username else f"🔮 Гороскоп за {period_hours} ч"
-                else:
-                    prefix = f"📊 Анализ за {period_hours} ч"
+                prefix = f"📊 Анализ за {period_hours} ч"
                 
                 return f"{prefix}\n\n{analysis[:safe_length]}"
     

@@ -21,7 +21,7 @@ class OpenAIClientError(Exception):
 class OpenAIClient:
     """Client for interacting with OpenAI API to analyze messages."""
     
-    def __init__(self, api_key: str, base_url: str = None, model: str = "gpt-4o-mini", max_tokens: int = 4000, horoscope_max_tokens: int = 2000, inline_max_tokens: int = 500, timezone: Optional[str] = None):
+    def __init__(self, api_key: str, base_url: str = None, model: str = "gpt-4o-mini", max_tokens: int = 4000, inline_max_tokens: int = 500, timezone: Optional[str] = None):
         """
         Initialize OpenAI client.
         
@@ -30,7 +30,6 @@ class OpenAIClient:
             base_url: Optional base URL for API (defaults to OpenAI's endpoint)
             model: Model to use for analysis
             max_tokens: Maximum tokens for API requests (analysis)
-            horoscope_max_tokens: Maximum tokens for horoscope requests
             inline_max_tokens: Maximum tokens for inline question answers
             timezone: Optional IANA timezone identifier for timestamp formatting
         """
@@ -41,7 +40,6 @@ class OpenAIClient:
         self.client = AsyncOpenAI(**client_kwargs)
         self.model = model
         self.max_tokens = max_tokens
-        self.horoscope_max_tokens = horoscope_max_tokens
         self.inline_max_tokens = inline_max_tokens
         self.timezone = timezone
         logger.info(
@@ -49,7 +47,6 @@ class OpenAIClient:
             extra={
                 "model": model,
                 "max_tokens": max_tokens,
-                "horoscope_max_tokens": horoscope_max_tokens,
                 "inline_max_tokens": inline_max_tokens,
                 "base_url": base_url or "default",
                 "timezone": timezone or "UTC"
@@ -153,98 +150,6 @@ class OpenAIClient:
                 f"Неожиданная ошибка при анализе: {str(e)}"
             ) from e
     
-    async def create_horoscope(self, messages: List[MessageModel], username: str) -> str:
-        """
-        Create an ironic horoscope based on user's messages.
-        
-        Args:
-            messages: List of user's messages to analyze (can be empty)
-            username: Username for logging
-            
-        Returns:
-            Horoscope result as formatted text
-            
-        Raises:
-            APIError: If OpenAI API returns an error
-            RateLimitError: If rate limit is exceeded
-            APIConnectionError: If connection to API fails
-        """
-        # Гороскоп генерируется даже без сообщений - звезды всегда что-то скажут
-        
-        try:
-            prompt = self._build_horoscope_prompt(messages)
-            
-            logger.info(
-                "Sending horoscope request to OpenAI",
-                extra={
-                    "message_count": len(messages),
-                    "username": username,
-                    "prompt_length": len(prompt)
-                }
-            )
-            
-            response = await self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": r"""Ты - ироничный астролог-мемолог, который составляет гороскопы на основе сообщений пользователей в чатах.
-
-КРИТИЧЕСКИ ВАЖНЫЕ ПРАВИЛА ФОРМАТИРОВАНИЯ:
-
-1. УПОМИНАНИЯ ПОЛЬЗОВАТЕЛЕЙ: ВСЕГДА ставь обратный слеш \ перед каждым подчеркиванием в username
-   Правильно: @user\_name, @test\_user\_123, @my\_cool\_name
-   Неправильно: @user_name, @test_user_123
-   ВАЖНО: Это необходимо для корректного отображения в Telegram Markdown
-
-Ты ОБЯЗАН следовать этим правилам в каждом ответе."""
-                    },
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
-                ],
-                max_tokens=self.horoscope_max_tokens,
-                temperature=0.8
-            )
-            
-            horoscope = response.choices[0].message.content
-            
-            logger.info(
-                "Horoscope completed successfully",
-                extra={
-                    "tokens_used": response.usage.total_tokens,
-                    "response_length": len(horoscope) if horoscope else 0,
-                    "username": username
-                }
-            )
-            
-            return horoscope or "Звезды отказались комментировать ваши сообщения. 🌟"
-            
-        except RateLimitError as e:
-            logger.error("OpenAI rate limit exceeded", exc_info=True)
-            raise OpenAIClientError(
-                "Превышен лимит запросов к OpenAI API. Попробуйте позже."
-            ) from e
-            
-        except APIConnectionError as e:
-            logger.error("Failed to connect to OpenAI API", exc_info=True)
-            raise OpenAIClientError(
-                "Не удалось подключиться к OpenAI API. Проверьте соединение."
-            ) from e
-            
-        except OpenAIAPIError as e:
-            logger.error("OpenAI API error", exc_info=True)
-            raise OpenAIClientError(
-                f"Ошибка OpenAI API: {str(e)}"
-            ) from e
-            
-        except Exception as e:
-            logger.error("Unexpected error during horoscope creation", exc_info=True)
-            raise OpenAIClientError(
-                f"Неожиданная ошибка при создании гороскопа: {str(e)}"
-            ) from e
-    
     def _build_prompt(self, messages: List[MessageModel]) -> str:
         """
         Build analysis prompt from messages.
@@ -315,63 +220,6 @@ class OpenAIClient:
 СТИЛЬ: Используй сарказм, зумерский язык, иронию и легкий цинизм. Будь кратким. Добавь эмодзи для драматического эффекта. Мы анализируем человеческую комедию, а не пишем научную работу.
 
 НАЧНИ ОТВЕТ СРАЗУ С ПЕРВОГО ПУНКТА (*1. Основные темы обсуждения* 🎭). НЕ ДОБАВЛЯЙ ВСТУПЛЕНИЙ ИЛИ ЗАКЛЮЧЕНИЙ."""
-        return prompt
-    
-    def _build_horoscope_prompt(self, messages: List[MessageModel]) -> str:
-        """
-        Build horoscope prompt from user's messages.
-        
-        Args:
-            messages: List of user's messages to analyze
-            
-        Returns:
-            Formatted horoscope prompt string in Russian
-        """
-        # Sort messages by timestamp
-        sorted_messages = sorted(messages, key=lambda m: m.timestamp)
-        
-        # Build message list
-        message_lines = []
-        for msg in sorted_messages:
-            timestamp_str = format_datetime(msg.timestamp, self.timezone)
-            reactions_str = ""
-            
-            if msg.reactions:
-                reactions_list = [f"{emoji}: {count}" for emoji, count in msg.reactions.items()]
-                reactions_str = f" [Реакции: {', '.join(reactions_list)}]"
-            
-            message_lines.append(
-                f"[{timestamp_str}] {msg.text}{reactions_str}"
-            )
-        
-        messages_text = "\n".join(message_lines) if message_lines else "Сообщений нет - пользователь молчал как партизан"
-        
-        # Определяем контекст для промпта
-        has_messages = len(messages) > 0
-        context_note = "" if has_messages else "\nВАЖНО: У пользователя нет сообщений за последний период. Составь гороскоп на основе самого факта молчания - это тоже говорит о многом!"
-        
-        # Build complete horoscope prompt
-        prompt = f"""Составь саркастичный гороскоп на основе сообщений пользователя. Используй тролинг и сарказм, но избегай прямых оскорблений личности.{context_note}
-
-СООБЩЕНИЯ ПОЛЬЗОВАТЕЛЯ:
-{messages_text}
-
-ФОРМАТ ОТВЕТА (СТРОГО соблюдай каждую деталь):
-
-Дай предсказания на основе сообщений с иронией и сарказмом.
-Важно: не упоминай факты из сообщений в предсказании, анализируй их общий смысл.
-
-ПРАВИЛА ФОРМАТИРОВАНИЯ (ОБЯЗАТЕЛЬНЫ):
-При упоминании пользователей ВСЕГДА экранируй подчеркивания обратным слешем
-   Правильно: @user\_name, @john\_doe, @test\_user\_123
-   Неправильно: @user_name, @john_doe, @test_user_123
-   КРИТИЧНО: Каждое подчеркивание должно быть с обратным слешем перед ним
-
-СТИЛЬ: Будь саркастичным, но позитивным. Избегай оскорблений личности. Представь, что ты тролишь, но в глубине души желаешь добра.
-
-ДЛИНА: Будь кратким! Общий объем гороскопа не должен превышать 4 предложений.
-
-НЕ ДОБАВЛЯЙ ВСТУПЛЕНИЙ ИЛИ ЗАКЛЮЧЕНИЙ."""
         return prompt
     
     async def _needs_chat_context(self, question: str, has_reply: bool) -> bool:

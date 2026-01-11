@@ -7,7 +7,7 @@ from aiogram.filters import Command
 from aiogram.enums import ChatType
 
 from services.analysis_service import AnalysisService
-from utils.telegram_sender import send_analysis_with_fallback, send_horoscope_with_fallback, safe_reply
+from utils.telegram_sender import send_analysis_with_fallback, safe_reply
 from utils.message_formatter import MessageFormatter
 from config.settings import Config
 
@@ -130,119 +130,6 @@ def create_user_router(config: Config) -> Router:
                 await message.answer("❌ Произошла ошибка при выполнении команды.")
             except Exception:
                 pass
-    
-    
-    
-    # TODO: Команда гороскопа временно отключена для доработки
-    # @router.message(
-    #     Command("horoscope"),
-    #     lambda message: message.chat.type in [ChatType.GROUP, ChatType.SUPERGROUP]
-    # )
-    # async def cmd_horoscope(
-    #     message: Message,
-    #     analysis_service: AnalysisService,
-    #     config: Config
-    # ):
-    #     """
-    #     Handle /horoscope command for creating user's horoscope.
-    #     
-    #     Creates an ironic horoscope based on user's messages from the last 12 hours.
-    #     Regular users are subject to debounce protection, admins bypass it.
-    #     
-    #     Args:
-    #         message: Command message from user
-    #         analysis_service: Service for message analysis
-    #         config: Bot configuration
-    #     """
-    #     try:
-    #         # Check if user is admin
-    #         is_admin = message.from_user.id == config.admin_id
-    #         
-    #         # Get user info
-    #         user_id = message.from_user.id
-    #         username = message.from_user.username or message.from_user.first_name or "Unknown"
-    #         
-    #         logger.info(
-    #             "/horoscope command received",
-    #             extra={
-    #                 "user_id": user_id,
-    #                 "username": username,
-    #                 "chat_id": message.chat.id,
-    #                 "is_admin": is_admin
-    #             }
-    #         )
-    #         
-    #         # Show processing message
-    #         processing_msg = await message.answer("🔮 Звезды изучают ваши сообщения...")
-    #         
-    #         try:
-    #             # Call horoscope service with debounce protection
-    #             result, from_cache = await analysis_service.create_horoscope_with_debounce(
-    #                 user_id=user_id,
-    #                 username=username,
-    #                 chat_id=message.chat.id,
-    #                 hours=12,  # Fixed 12 hours for horoscope
-    #                 bypass_debounce=is_admin
-    #             )
-    #             
-    #             # Delete processing message
-    #             await processing_msg.delete()
-    #             
-    #             # Send result with fallback mechanism (реплаем на исходное сообщение)
-    #             await send_horoscope_with_fallback(
-    #                 send_func=lambda text, pm: safe_reply(message, text, pm),
-    #                 horoscope_result=result,
-    #                 period_hours=12,
-    #                 from_cache=from_cache,
-    #                 config=config,
-    #                 username=username
-    #             )
-    #             
-    #             logger.info(
-    #                 "/horoscope command completed",
-    #                 extra={
-    #                     "user_id": user_id,
-    #                     "username": username,
-    #                     "chat_id": message.chat.id,
-    #                     "from_cache": from_cache
-    #                 }
-    #             )
-    #             
-    #         except ValueError as e:
-    #             # Handle debounce rejection
-    #             error_msg = str(e)
-    #             
-    #             # Extract remaining seconds from error message
-    #             try:
-    #                 remaining_seconds = float(error_msg)
-    #                 warning_msg = MessageFormatter.format_debounce_warning("гороскоп", remaining_seconds)
-    #                 await processing_msg.edit_text(warning_msg, parse_mode="Markdown")
-    #             except Exception:
-    #                 # Fallback if parsing fails
-    #                 await processing_msg.edit_text(f"⚠️ {error_msg}")
-    #             
-    #             logger.debug(
-    #                 "/horoscope command debounced",
-    #                 extra={
-    #                     "user_id": user_id,
-    #                     "username": username,
-    #                     "chat_id": message.chat.id
-    #                 }
-    #             )
-    #             
-    #     except Exception as e:
-    #         logger.error(
-    #             f"Error in /horoscope command: {e}",
-    #             extra={
-    #                 "user_id": message.from_user.id if message.from_user else None,
-    #                 "chat_id": message.chat.id if message.chat else None
-    #             },
-    #             exc_info=True
-    #         )
-    #         try:
-    #             await message.answer("❌ Произошла ошибка при создании гороскопа.")
-    #         except Exception:
-    #             pass
     
     
     return router

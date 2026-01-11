@@ -114,7 +114,6 @@ async def main() -> None:
             base_url=config.openai_base_url,
             model=config.openai_model,
             max_tokens=config.max_tokens,
-            horoscope_max_tokens=config.horoscope_max_tokens,
             inline_max_tokens=config.inline_max_tokens,
             timezone=config.timezone
         )
@@ -135,8 +134,7 @@ async def main() -> None:
             debounce_interval_seconds=config.debounce_interval_seconds,
             cache_ttl_minutes=config.cache_ttl_minutes,
             analysis_period_hours=config.analysis_period_hours,
-            inline_debounce_seconds=config.inline_debounce_seconds,
-            horoscope_debounce_seconds=config.horoscope_debounce_seconds
+            inline_debounce_seconds=config.inline_debounce_seconds
         )
         
         admin_service = AdminService(
