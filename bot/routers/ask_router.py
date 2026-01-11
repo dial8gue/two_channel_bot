@@ -251,13 +251,17 @@ def create_ask_router(config: Config) -> Router:
             config: Конфигурация бота
         """
         try:
+            text = message.text or ""
+            
+            # Игнорируем команды (начинаются с /)
+            if text.startswith('/'):
+                raise SkipHandler()
+            
             # Получаем username бота
             bot_username = await _get_bot_username(bot)
             
             if not bot_username:
                 raise SkipHandler()
-            
-            text = message.text or ""
             
             # Проверяем упоминание бота
             has_mention, question = _check_bot_mention(text, bot_username)
