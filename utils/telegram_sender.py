@@ -85,8 +85,7 @@ async def send_analysis_with_fallback(
         period_hours=period_hours,
         from_cache=from_cache,
         parse_mode=config.default_parse_mode,
-        max_length=config.max_message_length,
-        analysis_type="analysis"
+        max_length=config.max_message_length
     )
     
     # Handle both single string and list return from formatter
@@ -113,8 +112,7 @@ async def send_analysis_with_fallback(
                         period_hours=period_hours,
                         from_cache=from_cache,
                         parse_mode="HTML",
-                        max_length=config.max_message_length,
-                        analysis_type="analysis"
+                        max_length=config.max_message_length
                     )
                     
                     if isinstance(html_result, str):
@@ -136,8 +134,7 @@ async def send_analysis_with_fallback(
                         period_hours=period_hours,
                         from_cache=from_cache,
                         parse_mode=None,
-                        max_length=config.max_message_length,
-                        analysis_type="analysis"
+                        max_length=config.max_message_length
                     )
                     
                     if isinstance(plain_result, str):
