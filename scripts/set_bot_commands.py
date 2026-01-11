@@ -37,8 +37,7 @@ async def set_commands():
         
         # Commands for all group chats (available to all users)
         group_commands = [
-            BotCommand(command="anal", description="Анализ сообщений (6 часов)"),
-            BotCommand(command="deep_anal", description="Глубокий анализ (12 часов)"),
+            BotCommand(command="anal", description="Анализ сообщений (8 часов)"),
             BotCommand(command="horoscope", description="Гороскоп на основе сообщений"),
             BotCommand(command="ask", description="Задать вопрос боту"),
         ]
@@ -69,7 +68,7 @@ async def set_commands():
         print("✅ Private chat commands set successfully")
         
         # Note: BotCommandScopeAllPrivateChats doesn't override group commands
-        # Admin will see group commands (anal, deep_anal) in groups
+        # Admin will see group commands (anal) in groups
         # and admin commands in private chat with bot
         
         print("\n📋 Registered commands:")

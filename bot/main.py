@@ -135,7 +135,8 @@ async def main() -> None:
             debounce_interval_seconds=config.debounce_interval_seconds,
             cache_ttl_minutes=config.cache_ttl_minutes,
             analysis_period_hours=config.analysis_period_hours,
-            inline_debounce_seconds=config.inline_debounce_seconds
+            inline_debounce_seconds=config.inline_debounce_seconds,
+            horoscope_debounce_seconds=config.horoscope_debounce_seconds
         )
         
         admin_service = AdminService(

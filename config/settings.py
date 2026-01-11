@@ -32,15 +32,15 @@ class Config:
     # Analysis
     analysis_period_hours: int
     
-    # User Analysis Commands
+    # User Analysis Command
     anal_period_hours: int
-    deep_anal_period_hours: int
     
     # Cache
     cache_ttl_minutes: int
     
     # Debounce
     debounce_interval_seconds: int
+    horoscope_debounce_seconds: int
     
     # Collection
     collection_enabled: bool
@@ -89,10 +89,10 @@ class Config:
         db_path = os.getenv("DB_PATH", "/app/data/bot.db")
         storage_period_hours = cls._get_int_env("STORAGE_PERIOD_HOURS", default=168)  # 7 days
         analysis_period_hours = cls._get_int_env("ANALYSIS_PERIOD_HOURS", default=24)
-        anal_period_hours = cls._get_int_env("ANAL_PERIOD_HOURS", default=6)
-        deep_anal_period_hours = cls._get_int_env("DEEP_ANAL_PERIOD_HOURS", default=12)
+        anal_period_hours = cls._get_int_env("ANAL_PERIOD_HOURS", default=8)
         cache_ttl_minutes = cls._get_int_env("CACHE_TTL_MINUTES", default=60)
         debounce_interval_seconds = cls._get_int_env("DEBOUNCE_INTERVAL_SECONDS", default=300)  # 5 minutes
+        horoscope_debounce_seconds = cls._get_int_env("HOROSCOPE_DEBOUNCE_SECONDS", default=3600)  # 1 hour
         collection_enabled = cls._get_bool_env("COLLECTION_ENABLED", default=True)
         buffer_size = cls._get_int_env("BUFFER_SIZE", default=50)  # Flush after 50 messages
         buffer_flush_interval_seconds = cls._get_int_env("BUFFER_FLUSH_INTERVAL_SECONDS", default=30)  # Flush every 30 seconds
@@ -109,9 +109,9 @@ class Config:
         cls._validate_positive("STORAGE_PERIOD_HOURS", storage_period_hours)
         cls._validate_positive("ANALYSIS_PERIOD_HOURS", analysis_period_hours)
         cls._validate_positive("ANAL_PERIOD_HOURS", anal_period_hours)
-        cls._validate_positive("DEEP_ANAL_PERIOD_HOURS", deep_anal_period_hours)
         cls._validate_positive("CACHE_TTL_MINUTES", cache_ttl_minutes)
         cls._validate_positive("DEBOUNCE_INTERVAL_SECONDS", debounce_interval_seconds)
+        cls._validate_positive("HOROSCOPE_DEBOUNCE_SECONDS", horoscope_debounce_seconds)
         cls._validate_positive("BUFFER_SIZE", buffer_size)
         cls._validate_positive("BUFFER_FLUSH_INTERVAL_SECONDS", buffer_flush_interval_seconds)
         cls._validate_positive("MAX_MESSAGE_LENGTH", max_message_length)
@@ -136,9 +136,9 @@ class Config:
             storage_period_hours=storage_period_hours,
             analysis_period_hours=analysis_period_hours,
             anal_period_hours=anal_period_hours,
-            deep_anal_period_hours=deep_anal_period_hours,
             cache_ttl_minutes=cache_ttl_minutes,
             debounce_interval_seconds=debounce_interval_seconds,
+            horoscope_debounce_seconds=horoscope_debounce_seconds,
             collection_enabled=collection_enabled,
             buffer_size=buffer_size,
             buffer_flush_interval_seconds=buffer_flush_interval_seconds,

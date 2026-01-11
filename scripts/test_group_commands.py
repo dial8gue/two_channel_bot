@@ -81,13 +81,6 @@ async def diagnose():
         print(f"   Chat type: {message.chat.type}")
         await message.answer("✅ Команда /anal получена! Бот работает.")
     
-    @dp.message(Command("deep_anal"))
-    async def test_deep_anal(message: Message):
-        """Test /deep_anal command."""
-        print(f"\n✅ /deep_anal command handler triggered!")
-        print(f"   Chat type: {message.chat.type}")
-        await message.answer("✅ Команда /deep_anal получена! Бот работает.")
-    
     @dp.message(Command("test"))
     async def test_command(message: Message):
         """Test /test command."""

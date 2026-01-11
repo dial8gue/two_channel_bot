@@ -33,7 +33,8 @@ class AnalysisService:
         debounce_interval_seconds: int,
         cache_ttl_minutes: int,
         analysis_period_hours: int,
-        inline_debounce_seconds: int = 3600
+        inline_debounce_seconds: int = 3600,
+        horoscope_debounce_seconds: int = 3600
     ):
         """
         Initialize analysis service.
@@ -47,6 +48,7 @@ class AnalysisService:
             cache_ttl_minutes: Time to live for cached results
             analysis_period_hours: Default analysis period in hours
             inline_debounce_seconds: Minimum interval between inline questions for users
+            horoscope_debounce_seconds: Minimum interval between horoscope requests for users
         """
         self.message_repository = message_repository
         self.openai_client = openai_client
@@ -56,6 +58,7 @@ class AnalysisService:
         self.cache_ttl_minutes = cache_ttl_minutes
         self.analysis_period_hours = analysis_period_hours
         self.inline_debounce_seconds = inline_debounce_seconds
+        self.horoscope_debounce_seconds = horoscope_debounce_seconds
     
     async def analyze_messages_with_debounce(
         self,
@@ -260,7 +263,7 @@ class AnalysisService:
             if not bypass_debounce:
                 can_execute, remaining = await self.debounce_manager.can_execute(
                     operation=operation_key,
-                    interval_seconds=self.debounce_interval_seconds
+                    interval_seconds=self.horoscope_debounce_seconds
                 )
                 
                 if not can_execute:
