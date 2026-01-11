@@ -276,14 +276,14 @@ class MessageFormatter:
             return f"📊 {b_open}Анализ сообщений за последние {period_hours} ч{b_close}\n\n"
         
         def build_footer(mode: str) -> str:
-            """Построить футер сообщения."""
+            """Построить футер сообщения (только для кешированных результатов)."""
+            if not from_cache:
+                return ""
+            
             fmt = get_format(mode)
             i_open, i_close = fmt["italic"]
             
-            base_text = "Гороскоп составлен роботами" if analysis_type == "horoscope" else "Анализ выполнен роботами"
-            cache_suffix = " (из кеша)" if from_cache else ""
-            
-            return f"\n\n{i_open}{base_text}{cache_suffix}{i_close}"
+            return f"\n\n{i_open}(из кеша){i_close}"
         
         def format_content(text: str, mode: str) -> str:
             """Форматировать контент в зависимости от режима."""
