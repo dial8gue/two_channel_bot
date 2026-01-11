@@ -205,7 +205,7 @@ class OpenAIClient:
                     }
                 ],
                 max_tokens=self.horoscope_max_tokens,
-                temperature=0.7
+                temperature=0.8
             )
             
             horoscope = response.choices[0].message.content
@@ -508,7 +508,7 @@ class OpenAIClient:
                     }
                 ],
                 max_tokens=self.inline_max_tokens,
-                temperature=0.7
+                temperature=0.8
             )
             
             answer = response.choices[0].message.content
@@ -649,7 +649,7 @@ class OpenAIClient:
                     }
                 ],
                 max_tokens=self.inline_max_tokens,
-                temperature=0.7
+                temperature=0.8
             )
             
             answer = response.choices[0].message.content
