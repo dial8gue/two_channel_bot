@@ -213,7 +213,8 @@ class OpenAIClient:
         question: str,
         messages: List[MessageModel],
         reply_context: Optional[str] = None,
-        reply_timestamp: Optional[datetime] = None
+        reply_timestamp: Optional[datetime] = None,
+        asking_user: Optional[str] = None
     ) -> str:
         """
         Answer user's question based on chat context.
@@ -223,6 +224,7 @@ class OpenAIClient:
             messages: List of messages for context
             reply_context: Optional context from quoted message
             reply_timestamp: Optional timestamp of quoted message for context selection
+            asking_user: Optional username of the person asking
             
         Returns:
             Answer to the question (max 5 sentences)
@@ -241,7 +243,7 @@ class OpenAIClient:
                 return await self.answer_question_simple(question)
             
             messages_text = self._get_context_messages_text(messages, reply_timestamp)
-            prompt = build_question_user_prompt(question, messages_text, reply_context)
+            prompt = build_question_user_prompt(question, messages_text, reply_context, asking_user)
             
             logger.info(
                 "Sending question request to OpenAI",

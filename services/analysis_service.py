@@ -238,7 +238,8 @@ class AnalysisService:
         user_id: int,
         reply_context: Optional[str] = None,
         reply_timestamp: Optional[datetime] = None,
-        bypass_debounce: bool = False
+        bypass_debounce: bool = False,
+        asking_user: Optional[str] = None
     ) -> str:
         """
         Answer user question with spam protection (debounce).
@@ -250,6 +251,7 @@ class AnalysisService:
             reply_context: Optional context from quoted message
             reply_timestamp: Optional timestamp of quoted message for context selection
             bypass_debounce: Skip debounce check (for admin)
+            asking_user: Optional username of the person asking
             
         Returns:
             Answer to the question
@@ -318,7 +320,8 @@ class AnalysisService:
                 question=question,
                 messages=messages,
                 reply_context=reply_context,
-                reply_timestamp=reply_timestamp
+                reply_timestamp=reply_timestamp,
+                asking_user=asking_user
             )
             
             logger.info(

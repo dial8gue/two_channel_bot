@@ -107,10 +107,16 @@ SIMPLE_QUESTION_SYSTEM_PROMPT = """Ты - ироничный ассистент 
 def build_question_user_prompt(
     question: str,
     messages_text: str,
-    reply_context: str | None = None
+    reply_context: str | None = None,
+    asking_user: str | None = None
 ) -> str:
     """Build user prompt for answering a question."""
-    prompt_parts = [f"ВОПРОС: {question}"]
+    prompt_parts = []
+    
+    if asking_user:
+        prompt_parts.append(f"СПРАШИВАЕТ: @{asking_user}")
+    
+    prompt_parts.append(f"ВОПРОС: {question}")
     
     if reply_context:
         prompt_parts.append(f"\nЦИТИРУЕМОЕ СООБЩЕНИЕ:\n{reply_context}")

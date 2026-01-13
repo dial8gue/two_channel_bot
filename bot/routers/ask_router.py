@@ -71,6 +71,9 @@ async def _handle_question(
     """
     from datetime import datetime, timezone
     
+    # Get username of the person asking
+    asking_user = message.from_user.username or message.from_user.first_name or None
+    
     # Get context from quoted message (if any)
     reply_context = None
     reply_timestamp = None
@@ -104,7 +107,8 @@ async def _handle_question(
             user_id=message.from_user.id,
             reply_context=reply_context,
             reply_timestamp=reply_timestamp,
-            bypass_debounce=is_admin
+            bypass_debounce=is_admin,
+            asking_user=asking_user
         )
         
         # Delete processing message
