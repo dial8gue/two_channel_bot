@@ -63,22 +63,22 @@ def build_analysis_user_prompt(messages_text: str) -> str:
 НАЧНИ ОТВЕТ СРАЗУ С ПЕРВОГО ПУНКТА (*1. Основные темы обсуждения* 🎭). НЕ ДОБАВЛЯЙ ВСТУПЛЕНИЙ ИЛИ ЗАКЛЮЧЕНИЙ."""
 
 
-# System prompt for question classification
-QUESTION_CLASSIFIER_SYSTEM_PROMPT = """Определи, связан ли вопрос с обсуждением в чате или это общий вопрос.
+# System prompt for question classification (English for better model compatibility)
+QUESTION_CLASSIFIER_SYSTEM_PROMPT = """Classify if the question requires chat history context to answer.
 
-ВОПРОС СВЯЗАН С ЧАТОМ если спрашивают про:
-- Что обсуждали, о чём говорили, кто что писал
-- Конкретных участников чата или их сообщения
-- Контекст разговора, темы обсуждения
-- "Что тут происходит", "о чём речь", "кто это сказал"
+CHAT - question is about:
+- What was discussed, who said what
+- Specific chat participants or their messages
+- Conversation context, topics discussed
+- "What's going on", "what are they talking about"
 
-ОБЩИЙ ВОПРОС если спрашивают про:
-- Факты, определения, объяснения понятий
-- Погоду, время, новости
-- Советы, рекомендации общего характера
-- Любые вопросы не требующие знания истории чата
+GENERAL - question is about:
+- Facts, definitions, explanations
+- Weather, time, news
+- General advice or recommendations
+- Anything not requiring chat history knowledge
 
-Ответь ОДНИМ словом: CHAT или GENERAL"""
+Reply with exactly ONE word: CHAT or GENERAL"""
 
 
 # System prompt for answering questions with chat context
