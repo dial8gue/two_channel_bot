@@ -29,7 +29,7 @@ class OpenAIClientError(Exception):
 class OpenAIClient:
     """Client for interacting with OpenAI API to analyze messages."""
     
-    def __init__(self, api_key: str, base_url: str = None, model: str = "gpt-4o-mini", max_tokens: int = 4000, inline_max_tokens: int = 500, timezone: Optional[str] = None):
+    def __init__(self, api_key: str, base_url: str = None, model: str = "gpt-4o-mini", classifier_model: str = "deepseek/deepseek-chat", max_tokens: int = 4000, inline_max_tokens: int = 500, timezone: Optional[str] = None):
         """
         Initialize OpenAI client.
         
@@ -37,6 +37,7 @@ class OpenAIClient:
             api_key: OpenAI API key
             base_url: Optional base URL for API (defaults to OpenAI's endpoint)
             model: Model to use for analysis
+            classifier_model: Model to use for question classification
             max_tokens: Maximum tokens for API requests (analysis)
             inline_max_tokens: Maximum tokens for inline question answers
             timezone: Optional IANA timezone identifier for timestamp formatting
@@ -48,6 +49,7 @@ class OpenAIClient:
         self.client = AsyncOpenAI(**client_kwargs)
         self.model = model
         self.default_model = model  # Store default for reference
+        self.classifier_model = classifier_model
         self.max_tokens = max_tokens
         self.inline_max_tokens = inline_max_tokens
         self.timezone = timezone
@@ -55,6 +57,7 @@ class OpenAIClient:
             "OpenAI client initialized",
             extra={
                 "model": model,
+                "classifier_model": classifier_model,
                 "max_tokens": max_tokens,
                 "inline_max_tokens": inline_max_tokens,
                 "base_url": base_url or "default",
@@ -205,13 +208,13 @@ class OpenAIClient:
         
         try:
             response = await self.client.chat.completions.create(
-                model=self.model,
+                model=self.classifier_model,
                 messages=[
                     {"role": "system", "content": QUESTION_CLASSIFIER_SYSTEM_PROMPT},
                     {"role": "user", "content": question}
                 ],
                 max_tokens=10,
-                temperature=0.3
+                temperature=0
             )
             
             result = response.choices[0].message.content.strip().upper()

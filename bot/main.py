@@ -113,6 +113,7 @@ async def main() -> None:
             api_key=config.openai_api_key,
             base_url=config.openai_base_url,
             model=config.openai_model,
+            classifier_model=config.classifier_model,
             max_tokens=config.max_tokens,
             inline_max_tokens=config.inline_max_tokens,
             timezone=config.timezone

@@ -22,6 +22,7 @@ class Config:
     openai_api_key: str
     openai_base_url: Optional[str]
     openai_model: str
+    classifier_model: str
     max_tokens: int
     
     # Database
@@ -82,6 +83,7 @@ class Config:
         debug_mode = cls._get_bool_env("DEBUG_MODE", default=False)
         openai_base_url = os.getenv("OPENAI_BASE_URL")  # Optional, defaults to OpenAI's endpoint
         openai_model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+        classifier_model = os.getenv("CLASSIFIER_MODEL", "deepseek/deepseek-chat")
         max_tokens = cls._get_int_env("MAX_TOKENS", default=4000)
         db_path = os.getenv("DB_PATH", "/app/data/bot.db")
         storage_period_hours = cls._get_int_env("STORAGE_PERIOD_HOURS", default=168)  # 7 days
@@ -124,6 +126,7 @@ class Config:
             openai_api_key=openai_api_key,
             openai_base_url=openai_base_url,
             openai_model=openai_model,
+            classifier_model=classifier_model,
             max_tokens=max_tokens,
             db_path=db_path,
             storage_period_hours=storage_period_hours,
