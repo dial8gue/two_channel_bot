@@ -157,7 +157,8 @@ python -m bot.main
 | Переменная | Описание | По умолчанию |
 |------------|----------|--------------|
 | `OPENAI_BASE_URL` | Базовый URL для OpenAI API | `https://api.openai.com/v1` |
-| `OPENAI_MODEL` | Модель для анализа | `gpt-4o-mini` |
+| `OPENAI_MODEL` | Модель для анализа и ответов | `gpt-4o-mini` |
+| `CLASSIFIER_MODEL` | Модель для классификации вопросов (CHAT/GENERAL) | `deepseek/deepseek-v3.2` |
 | `MAX_TOKENS` | Максимальное количество токенов для анализа | `4000` |
 
 ### База данных
@@ -237,6 +238,7 @@ python -m bot.main
 | `/clear_db` | Личный чат | Очистить всю базу данных | `/clear_db` |
 | `/set_storage <hours>` | Личный чат | Установить период хранения сообщений | `/set_storage 168` |
 | `/set_analysis <hours>` | Личный чат | Установить период анализа по умолчанию | `/set_analysis 24` |
+| `/set_model <model>` | Личный чат | Установить модель OpenAI | `/set_model gpt-4o` |
 | `/start_collection` | Личный чат | Возобновить сбор сообщений | `/start_collection` |
 | `/stop_collection` | Личный чат | Остановить сбор сообщений | `/stop_collection` |
 
