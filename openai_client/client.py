@@ -211,11 +211,11 @@ class OpenAIClient:
                     {"role": "user", "content": question}
                 ],
                 max_tokens=10,
-                temperature=0
+                temperature=0.3
             )
             
             result = response.choices[0].message.content.strip().upper()
-            needs_context = "CHAT" in result
+            needs_context = "GENERAL" not in result
             
             logger.debug(
                 "Question classification",
