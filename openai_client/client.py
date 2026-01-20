@@ -47,6 +47,7 @@ class OpenAIClient:
         
         self.client = AsyncOpenAI(**client_kwargs)
         self.model = model
+        self.default_model = model  # Store default for reference
         self.max_tokens = max_tokens
         self.inline_max_tokens = inline_max_tokens
         self.timezone = timezone
@@ -60,6 +61,29 @@ class OpenAIClient:
                 "timezone": timezone or "UTC"
             }
         )
+    
+    def set_model(self, model: str) -> None:
+        """
+        Change the model used for API requests.
+        
+        Args:
+            model: New model name to use
+        """
+        old_model = self.model
+        self.model = model
+        logger.info(
+            "OpenAI model changed",
+            extra={"old_model": old_model, "new_model": model}
+        )
+    
+    def get_model(self) -> str:
+        """
+        Get the current model name.
+        
+        Returns:
+            Current model name
+        """
+        return self.model
     
     async def analyze_messages(self, messages: List[MessageModel]) -> str:
         """

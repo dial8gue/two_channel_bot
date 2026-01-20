@@ -12,6 +12,7 @@ from bot.filters.admin_filter import IsAdminFilter
 from services.analysis_service import AnalysisService
 from services.admin_service import AdminService
 from services.message_service import MessageService
+from openai_client.client import OpenAIClient
 from utils.message_formatter import MessageFormatter
 from utils.telegram_sender import send_analysis_with_fallback, safe_reply
 from config.settings import Config
@@ -535,6 +536,68 @@ def create_admin_router(config: Config) -> Router:
                 exc_info=True
             )
             await message.answer("❌ Ошибка при получении статистики.")
+    
+    
+    @router.message(Command("set_model"), admin_filter)
+    async def cmd_set_model(
+        message: Message,
+        admin_service: AdminService,
+        openai_client: OpenAIClient
+    ):
+        """
+        Handle /set_model command to change OpenAI model.
+        
+        Usage: /set_model <model_name>
+        
+        Args:
+            message: Command message from admin
+            admin_service: Service for admin operations
+            openai_client: OpenAI client instance
+        """
+        try:
+            # Parse model parameter
+            if not message.text or len(message.text.split()) < 2:
+                current_model = openai_client.get_model()
+                await message.answer(
+                    f"Текущая модель: `{current_model}`\n\n"
+                    "Использование: /set\\_model <название\\_модели>\n\n"
+                    "Примеры:\n"
+                    "• `gpt-4o-mini` — быстрая и дешёвая\n"
+                    "• `gpt-4o` — умнее, дороже\n"
+                    "• `gpt-4-turbo` — мощная",
+                    parse_mode=ParseMode.MARKDOWN
+                )
+                return
+            
+            model = message.text.split(maxsplit=1)[1].strip()
+            
+            logger.info(
+                "Set model command received",
+                extra={"admin_id": message.from_user.id, "model": model}
+            )
+            
+            # Save to database
+            await admin_service.set_openai_model(model)
+            
+            # Update client immediately
+            openai_client.set_model(model)
+            
+            await message.answer(f"✅ Модель изменена на: `{model}`", parse_mode=ParseMode.MARKDOWN)
+            
+            logger.info(
+                "OpenAI model updated",
+                extra={"admin_id": message.from_user.id, "model": model}
+            )
+            
+        except ValueError as e:
+            await message.answer(f"❌ {str(e)}")
+        except Exception as e:
+            logger.error(
+                f"Error setting model: {e}",
+                extra={"admin_id": message.from_user.id if message.from_user else None},
+                exc_info=True
+            )
+            await message.answer("❌ Ошибка при изменении модели.")
     
     
     return router

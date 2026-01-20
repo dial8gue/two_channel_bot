@@ -336,6 +336,7 @@ class MessageFormatter:
             ('newest_message', '📅', 'Самое новое сообщение: {value}', True),
             ('cache_entries', '💾', 'Записей в кеше: *{value}*', False),
             ('storage_period_hours', '⏱', 'Период хранения: *{value} ч*', False),
+            ('openai_model', '🤖', 'Модель OpenAI: `{value}`', False),
         ]
         
         try:

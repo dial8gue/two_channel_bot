@@ -118,6 +118,12 @@ async def main() -> None:
             timezone=config.timezone
         )
         
+        # Check if there's a saved model in database and apply it
+        saved_model = await config_repository.get("openai_model")
+        if saved_model:
+            openai_client.set_model(saved_model)
+            logger.info(f"Loaded saved OpenAI model from database: {saved_model}")
+        
         # Create service instances
         logger.info("Creating service instances...")
         message_service = MessageService(

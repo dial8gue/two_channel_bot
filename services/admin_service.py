@@ -18,6 +18,7 @@ class AdminService:
     CONFIG_STORAGE_PERIOD = "storage_period_hours"
     CONFIG_ANALYSIS_PERIOD = "analysis_period_hours"
     CONFIG_COLLECTION_ENABLED = "collection_enabled"
+    CONFIG_OPENAI_MODEL = "openai_model"
     
     def __init__(
         self,
@@ -209,6 +210,57 @@ class AdminService:
             # Default to enabled on error
             return True
     
+    async def set_openai_model(self, model: str) -> None:
+        """
+        Set the OpenAI model to use for analysis.
+        
+        Args:
+            model: Model name (e.g., 'gpt-4o-mini', 'gpt-4o', 'gpt-4-turbo')
+            
+        Raises:
+            ValueError: If model name is empty
+        """
+        try:
+            if not model or not model.strip():
+                raise ValueError("Model name cannot be empty")
+            
+            model = model.strip()
+            
+            await self.config_repository.set(
+                key=self.CONFIG_OPENAI_MODEL,
+                value=model
+            )
+            
+            logger.info(
+                "OpenAI model updated",
+                extra={"openai_model": model}
+            )
+            
+        except ValueError:
+            raise
+        except Exception as e:
+            logger.error(
+                f"Failed to set OpenAI model: {e}",
+                extra={"model": model},
+                exc_info=True
+            )
+            raise
+    
+    async def get_openai_model(self) -> Optional[str]:
+        """
+        Get the current OpenAI model setting.
+        
+        Returns:
+            Model name, or None if not set (uses default from config)
+        """
+        try:
+            value = await self.config_repository.get(self.CONFIG_OPENAI_MODEL)
+            return value if value else None
+            
+        except Exception as e:
+            logger.error(f"Failed to get OpenAI model: {e}", exc_info=True)
+            return None
+    
     async def get_stats(self) -> Dict[str, Any]:
         """
         Get database statistics.
@@ -273,6 +325,10 @@ class AdminService:
             stats['analysis_period_hours'] = analysis_period if analysis_period else "Not set"
             
             stats['collection_enabled'] = await self.is_collection_enabled()
+            
+            # Get OpenAI model setting
+            openai_model = await self.get_openai_model()
+            stats['openai_model'] = openai_model if openai_model else "Default (from env)"
             
             logger.info(
                 "Statistics gathered successfully",
