@@ -28,11 +28,12 @@ async def typing_loop(chat_id: int, bot: Bot, stop_event: asyncio.Event):
     try:
         while not stop_event.is_set():
             await bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
-            await asyncio.wait_for(stop_event.wait(), timeout=4.0)
-    except asyncio.TimeoutError:
-        pass
+            try:
+                await asyncio.wait_for(stop_event.wait(), timeout=4.0)
+            except asyncio.TimeoutError:
+                continue  # Timeout - send typing again
     except Exception:
-        pass
+        pass  # Silently stop on any error
 
 
 async def safe_reply(message: Message, text: str, parse_mode = None) -> Message:
