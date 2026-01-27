@@ -1,5 +1,6 @@
 """Router for handling inline questions to the bot."""
 
+import asyncio
 import logging
 import re
 from aiogram import Router, Bot, F
@@ -11,7 +12,7 @@ from aiogram.dispatcher.event.bases import SkipHandler
 from services.analysis_service import AnalysisService
 from openai_client.client import OpenAIClient
 from utils.message_formatter import MessageFormatter
-from utils.telegram_sender import safe_reply
+from utils.telegram_sender import safe_reply, typing_loop
 from config.settings import Config
 
 
@@ -96,8 +97,9 @@ async def _handle_question(
                 }
             )
     
-    # Show processing message
-    processing_msg = await message.answer("🤔 Думаю над ответом...")
+    # Start typing indicator
+    stop_typing = asyncio.Event()
+    typing_task = asyncio.create_task(typing_loop(message.chat.id, message.bot, stop_typing))
     
     try:
         # Call service with debounce protection
@@ -111,8 +113,9 @@ async def _handle_question(
             asking_user=asking_user
         )
         
-        # Delete processing message
-        await processing_msg.delete()
+        # Stop typing indicator
+        stop_typing.set()
+        typing_task.cancel()
         
         # Send reply with fallback on parsing error
         try:
@@ -137,14 +140,18 @@ async def _handle_question(
         )
         
     except ValueError as e:
+        # Stop typing indicator
+        stop_typing.set()
+        typing_task.cancel()
+        
         # Handle debounce
         error_msg = str(e)
         try:
             remaining_seconds = float(error_msg)
             warning_msg = MessageFormatter.format_debounce_warning("задавал вопрос", remaining_seconds)
-            await processing_msg.edit_text(warning_msg, parse_mode="Markdown")
+            await message.answer(warning_msg, parse_mode="Markdown")
         except Exception:
-            await processing_msg.edit_text(f"⚠️ {error_msg}")
+            await message.answer(f"⚠️ {error_msg}")
         
         logger.debug(
             "Question blocked by debounce",
@@ -153,6 +160,11 @@ async def _handle_question(
                 "chat_id": message.chat.id
             }
         )
+    except Exception:
+        # Stop typing indicator on any error
+        stop_typing.set()
+        typing_task.cancel()
+        raise
 
 
 def create_ask_router(config: Config) -> Router:
@@ -429,15 +441,17 @@ def create_ask_router(config: Config) -> Router:
                 }
             )
             
-            # Show processing message
-            processing_msg = await message.answer("🤔 Думаю над ответом...")
+            # Start typing indicator
+            stop_typing = asyncio.Event()
+            typing_task = asyncio.create_task(typing_loop(message.chat.id, message.bot, stop_typing))
             
             try:
                 # Call OpenAI directly without context
                 answer = await openai_client.answer_question_simple(question)
                 
-                # Delete processing message
-                await processing_msg.delete()
+                # Stop typing indicator
+                stop_typing.set()
+                typing_task.cancel()
                 
                 # Send reply with fallback on parsing error
                 try:
@@ -461,8 +475,10 @@ def create_ask_router(config: Config) -> Router:
                 )
                 
             except Exception as e:
+                stop_typing.set()
+                typing_task.cancel()
                 logger.error(f"Error generating answer: {e}", exc_info=True)
-                await processing_msg.edit_text("❌ Ошибка при генерации ответа.")
+                await message.answer("❌ Ошибка при генерации ответа.")
                 
         except Exception as e:
             logger.error(

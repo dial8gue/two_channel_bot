@@ -1,5 +1,6 @@
 """Router for handling user-initiated analysis commands."""
 
+import asyncio
 import logging
 from aiogram import Router
 from aiogram.types import Message
@@ -7,7 +8,7 @@ from aiogram.filters import Command
 from aiogram.enums import ChatType
 
 from services.analysis_service import AnalysisService
-from utils.telegram_sender import send_analysis_with_fallback, safe_reply
+from utils.telegram_sender import send_analysis_with_fallback, safe_reply, typing_loop
 from utils.message_formatter import MessageFormatter
 from config.settings import Config
 
@@ -62,8 +63,9 @@ def create_user_router(config: Config) -> Router:
                 }
             )
             
-            # Show processing message
-            processing_msg = await message.answer("⏳ Анализирую сообщения...")
+            # Start typing indicator
+            stop_typing = asyncio.Event()
+            typing_task = asyncio.create_task(typing_loop(message.chat.id, message.bot, stop_typing))
             
             try:
                 # Call analysis service with debounce protection
@@ -75,8 +77,9 @@ def create_user_router(config: Config) -> Router:
                     bypass_debounce=is_admin
                 )
                 
-                # Delete processing message
-                await processing_msg.delete()
+                # Stop typing indicator
+                stop_typing.set()
+                typing_task.cancel()
                 
                 # Send result with fallback mechanism (reply to original message)
                 await send_analysis_with_fallback(
@@ -97,17 +100,18 @@ def create_user_router(config: Config) -> Router:
                 )
                 
             except ValueError as e:
+                # Stop typing indicator
+                stop_typing.set()
+                typing_task.cancel()
+                
                 # Handle debounce rejection
                 error_msg = str(e)
-                # Extract remaining seconds from error message
-                # Expected format: just a number (seconds as string)
                 try:
                     remaining_seconds = float(error_msg)
                     warning_msg = MessageFormatter.format_debounce_warning("анализировал", remaining_seconds)
-                    await processing_msg.edit_text(warning_msg, parse_mode="Markdown")
+                    await message.answer(warning_msg, parse_mode="Markdown")
                 except Exception:
-                    # Fallback if parsing fails
-                    await processing_msg.edit_text(f"⚠️ {error_msg}")
+                    await message.answer(f"⚠️ {error_msg}")
                 
                 logger.debug(
                     "/anal command debounced",
@@ -116,6 +120,10 @@ def create_user_router(config: Config) -> Router:
                         "chat_id": message.chat.id
                     }
                 )
+            except Exception:
+                stop_typing.set()
+                typing_task.cancel()
+                raise
                 
         except Exception as e:
             logger.error(

@@ -1,9 +1,10 @@
 """Router for handling administrative commands."""
 
+import asyncio
 import logging
 from typing import Optional
 
-from aiogram import Router
+from aiogram import Router, Bot
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import Command
 from aiogram.enums import ParseMode, ChatType
@@ -14,7 +15,7 @@ from services.admin_service import AdminService
 from services.message_service import MessageService
 from openai_client.client import OpenAIClient
 from utils.message_formatter import MessageFormatter
-from utils.telegram_sender import send_analysis_with_fallback, safe_reply
+from utils.telegram_sender import send_analysis_with_fallback, safe_reply, typing_loop
 from config.settings import Config
 
 
@@ -22,13 +23,14 @@ logger = logging.getLogger(__name__)
 
 
 async def _perform_analysis_and_send(
-    bot,
+    bot: Bot,
     target_chat_id: int,
     analysis_service: AnalysisService,
     config: Config,
     hours: Optional[int],
     chat_id_to_analyze: Optional[int],
-    admin_id: int
+    admin_id: int,
+    typing_chat_id: int
 ):
     """
     Helper function to perform analysis and send results with fallback formatting.
@@ -41,39 +43,52 @@ async def _perform_analysis_and_send(
         hours: Hours to analyze
         chat_id_to_analyze: Chat ID to analyze (None for all)
         admin_id: Admin user ID for logging
+        typing_chat_id: Chat ID to show typing indicator
     """
-    # Perform analysis with debounce bypass for admin
-    # Use chat_id_to_analyze or 0 for operation key (0 means "all chats")
-    operation_chat_id = chat_id_to_analyze if chat_id_to_analyze is not None else 0
+    # Start typing indicator
+    stop_typing = asyncio.Event()
+    typing_task = asyncio.create_task(typing_loop(typing_chat_id, bot, stop_typing))
     
-    analysis_result, from_cache = await analysis_service.analyze_messages_with_debounce(
-        hours=hours or config.analysis_period_hours,
-        chat_id=operation_chat_id,
-        user_id=admin_id,
-        operation_type="admin_analyze",
-        bypass_debounce=True  # Admin bypasses debounce
-    )
-    
-    # Send result with fallback mechanism
-    period_hours = hours or config.analysis_period_hours
-    await send_analysis_with_fallback(
-        send_func=lambda text, pm: bot.send_message(chat_id=target_chat_id, text=text, parse_mode=pm),
-        analysis_result=analysis_result,
-        period_hours=period_hours,
-        from_cache=from_cache,
-        config=config
-    )
-    
-    logger.info(
-        "Analysis completed and sent",
-        extra={
-            "admin_id": admin_id,
-            "period_hours": period_hours,
-            "from_cache": from_cache,
-            "target_chat_id": target_chat_id,
-            "chat_id_analyzed": chat_id_to_analyze
-        }
-    )
+    try:
+        # Perform analysis with debounce bypass for admin
+        operation_chat_id = chat_id_to_analyze if chat_id_to_analyze is not None else 0
+        
+        analysis_result, from_cache = await analysis_service.analyze_messages_with_debounce(
+            hours=hours or config.analysis_period_hours,
+            chat_id=operation_chat_id,
+            user_id=admin_id,
+            operation_type="admin_analyze",
+            bypass_debounce=True
+        )
+        
+        # Stop typing indicator
+        stop_typing.set()
+        typing_task.cancel()
+        
+        # Send result with fallback mechanism
+        period_hours = hours or config.analysis_period_hours
+        await send_analysis_with_fallback(
+            send_func=lambda text, pm: bot.send_message(chat_id=target_chat_id, text=text, parse_mode=pm),
+            analysis_result=analysis_result,
+            period_hours=period_hours,
+            from_cache=from_cache,
+            config=config
+        )
+        
+        logger.info(
+            "Analysis completed and sent",
+            extra={
+                "admin_id": admin_id,
+                "period_hours": period_hours,
+                "from_cache": from_cache,
+                "target_chat_id": target_chat_id,
+                "chat_id_analyzed": chat_id_to_analyze
+            }
+        )
+    except Exception:
+        stop_typing.set()
+        typing_task.cancel()
+        raise
 
 
 def create_admin_router(config: Config) -> Router:
@@ -152,7 +167,8 @@ def create_admin_router(config: Config) -> Router:
                         config=config,
                         hours=hours,
                         chat_id_to_analyze=chat_id_to_analyze,
-                        admin_id=message.from_user.id
+                        admin_id=message.from_user.id,
+                        typing_chat_id=message.chat.id
                     )
                     await processing_msg.delete()
                     
@@ -268,7 +284,8 @@ def create_admin_router(config: Config) -> Router:
                     config=config,
                     hours=hours,
                     chat_id_to_analyze=chat_id_to_analyze,
-                    admin_id=callback.from_user.id
+                    admin_id=callback.from_user.id,
+                    typing_chat_id=callback.message.chat.id
                 )
                 await callback.message.delete()
                 

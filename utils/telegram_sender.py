@@ -1,10 +1,12 @@
 """
 Utility for sending Telegram messages with fallback formatting.
 """
+import asyncio
 import logging
 from typing import Union, Callable, Awaitable
+from aiogram import Bot
 from aiogram.types import Message
-from aiogram.enums import ParseMode
+from aiogram.enums import ParseMode, ChatAction
 from aiogram.exceptions import TelegramBadRequest
 
 from utils.message_formatter import MessageFormatter, get_parse_mode
@@ -12,6 +14,25 @@ from config.settings import Config
 
 
 logger = logging.getLogger(__name__)
+
+
+async def typing_loop(chat_id: int, bot: Bot, stop_event: asyncio.Event):
+    """
+    Send typing action every 4 seconds until stopped.
+    
+    Args:
+        chat_id: Chat ID to show typing indicator
+        bot: Bot instance
+        stop_event: Event to signal stop
+    """
+    try:
+        while not stop_event.is_set():
+            await bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
+            await asyncio.wait_for(stop_event.wait(), timeout=4.0)
+    except asyncio.TimeoutError:
+        pass
+    except Exception:
+        pass
 
 
 async def safe_reply(message: Message, text: str, parse_mode = None) -> Message:
