@@ -211,8 +211,8 @@ def create_ask_router(config: Config) -> Router:
             
             if not question.strip():
                 await message.answer(
-                    "❓ Укажите вопрос после команды.\n"
-                    "Использование: `/ask ваш вопрос`",
+                    "❓ Укажи вопрос после команды.\n"
+                    "Использование: `/ask твой вопрос`",
                     parse_mode="Markdown"
                 )
                 return
@@ -367,8 +367,8 @@ def create_ask_router(config: Config) -> Router:
             
             if not question:
                 await message.answer(
-                    "❓ Укажите вопрос после упоминания.\n"
-                    f"Использование: `@{bot_username} ваш вопрос`",
+                    "❓ Укажи вопрос после упоминания.\n"
+                    f"Использование: `@{bot_username} твой вопрос`",
                     parse_mode="Markdown"
                 )
                 return
@@ -427,8 +427,8 @@ def create_ask_router(config: Config) -> Router:
             
             if not question.strip():
                 await message.answer(
-                    "❓ Укажите вопрос после команды.\n"
-                    "Использование: `/ask ваш вопрос`",
+                    "❓ Укажи вопрос после команды.\n"
+                    "Использование: `/ask твой вопрос`",
                     parse_mode="Markdown"
                 )
                 return

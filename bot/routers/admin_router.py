@@ -138,7 +138,7 @@ def create_admin_router(config: Config) -> Router:
                         await message.answer("❌ Период должен быть положительным числом от 1 до 24.")
                         return
                 except ValueError:
-                    await message.answer("❌ Неверный формат. Используйте: /analyze [часы]")
+                    await message.answer("❌ Неверный формат. Используй: /analyze [часы]")
                     return
             
             logger.info(
@@ -179,7 +179,7 @@ def create_admin_router(config: Config) -> Router:
                 except Exception as e:
                     logger.error(f"Analysis failed: {e}", exc_info=True)
                     await processing_msg.delete()
-                    await message.answer("❌ Ошибка при анализе сообщений. Проверьте логи для деталей.")
+                    await message.answer("❌ Ошибка при анализе сообщений. Проверь логи для деталей.")
                     
             else:
                 # Command from private chat - show chat selection
@@ -224,7 +224,7 @@ def create_admin_router(config: Config) -> Router:
                 keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)
                 
                 await message.answer(
-                    "Выберите чат для анализа:",
+                    "Выбери чат для анализа:",
                     reply_markup=keyboard
                 )
                 
@@ -294,7 +294,7 @@ def create_admin_router(config: Config) -> Router:
                 
             except Exception as e:
                 logger.error(f"Analysis failed: {e}", exc_info=True)
-                await callback.message.edit_text("❌ Ошибка при анализе сообщений. Проверьте логи для деталей.")
+                await callback.message.edit_text("❌ Ошибка при анализе сообщений. Проверь логи для деталей.")
                 
         except Exception as e:
             logger.error(
@@ -358,7 +358,7 @@ def create_admin_router(config: Config) -> Router:
             # Parse hours parameter
             if not message.text or len(message.text.split()) < 2:
                 await message.answer(
-                    "❌ Укажите период хранения в часах.\n"
+                    "❌ Укажи период хранения в часах.\n"
                     "Использование: /set_storage <часы>"
                 )
                 return
@@ -410,7 +410,7 @@ def create_admin_router(config: Config) -> Router:
             # Parse hours parameter
             if not message.text or len(message.text.split()) < 2:
                 await message.answer(
-                    "❌ Укажите период анализа в часах.\n"
+                    "❌ Укажи период анализа в часах.\n"
                     "Использование: /set_analysis <часы>"
                 )
                 return

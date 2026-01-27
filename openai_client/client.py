@@ -144,13 +144,13 @@ class OpenAIClient:
         except RateLimitError as e:
             logger.error("OpenAI rate limit exceeded", exc_info=True)
             raise OpenAIClientError(
-                "Превышен лимит запросов к OpenAI API. Попробуйте позже."
+                "Превышен лимит запросов к OpenAI API. Попробуй позже."
             ) from e
             
         except APIConnectionError as e:
             logger.error("Failed to connect to OpenAI API", exc_info=True)
             raise OpenAIClientError(
-                "Не удалось подключиться к OpenAI API. Проверьте соединение."
+                "Не удалось подключиться к OpenAI API. Проверь соединение."
             ) from e
             
         except OpenAIAPIError as e:
@@ -306,7 +306,7 @@ class OpenAIClient:
             
         except RateLimitError as e:
             logger.error("OpenAI rate limit exceeded", exc_info=True)
-            raise OpenAIClientError("Превышен лимит запросов. Попробуйте позже.") from e
+            raise OpenAIClientError("Превышен лимит запросов. Попробуй позже.") from e
             
         except APIConnectionError as e:
             logger.error("OpenAI API connection error", exc_info=True)
@@ -413,7 +413,7 @@ class OpenAIClient:
             
         except RateLimitError as e:
             logger.error("OpenAI rate limit exceeded", exc_info=True)
-            raise OpenAIClientError("Превышен лимит запросов. Попробуйте позже.") from e
+            raise OpenAIClientError("Превышен лимит запросов. Попробуй позже.") from e
             
         except APIConnectionError as e:
             logger.error("OpenAI API connection error", exc_info=True)
