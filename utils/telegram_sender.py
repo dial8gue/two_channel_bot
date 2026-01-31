@@ -16,7 +16,7 @@ from config.settings import Config
 logger = logging.getLogger(__name__)
 
 
-async def typing_loop(chat_id: int, bot: Bot, stop_event: asyncio.Event):
+async def typing_loop(chat_id: int, bot: Bot, stop_event: asyncio.Event, max_duration: float = 120.0):
     """
     Send typing action every 4 seconds until stopped.
     
@@ -24,16 +24,30 @@ async def typing_loop(chat_id: int, bot: Bot, stop_event: asyncio.Event):
         chat_id: Chat ID to show typing indicator
         bot: Bot instance
         stop_event: Event to signal stop
+        max_duration: Maximum duration in seconds (default 2 minutes)
     """
+    import time
+    start_time = time.monotonic()
+    
     try:
         while not stop_event.is_set():
+            # Safety check: stop after max_duration
+            if time.monotonic() - start_time > max_duration:
+                logger.warning(
+                    f"Typing loop exceeded max duration ({max_duration}s), stopping",
+                    extra={"chat_id": chat_id}
+                )
+                break
+            
             await bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
             try:
                 await asyncio.wait_for(stop_event.wait(), timeout=4.0)
             except asyncio.TimeoutError:
                 continue  # Timeout - send typing again
-    except Exception:
-        pass  # Silently stop on any error
+    except asyncio.CancelledError:
+        pass  # Normal cancellation
+    except Exception as e:
+        logger.debug(f"Typing loop stopped: {e}")
 
 
 async def safe_reply(message: Message, text: str, parse_mode = None) -> Message:

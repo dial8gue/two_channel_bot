@@ -42,7 +42,9 @@ class OpenAIClient:
             inline_max_tokens: Maximum tokens for inline question answers
             timezone: Optional IANA timezone identifier for timestamp formatting
         """
-        client_kwargs = {"api_key": api_key}
+        import httpx
+        # Read timeout resets on each chunk received, so long generation won't be interrupted
+        client_kwargs["timeout"] = httpx.Timeout(connect=30.0, read=60.0, write=30.0, pool=30.0)
         if base_url:
             client_kwargs["base_url"] = base_url
         
