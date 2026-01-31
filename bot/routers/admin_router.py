@@ -30,7 +30,8 @@ async def _perform_analysis_and_send(
     hours: Optional[int],
     chat_id_to_analyze: Optional[int],
     admin_id: int,
-    typing_chat_id: int
+    typing_chat_id: int,
+    bypass_cache: bool = False
 ):
     """
     Helper function to perform analysis and send results with fallback formatting.
@@ -44,6 +45,7 @@ async def _perform_analysis_and_send(
         chat_id_to_analyze: Chat ID to analyze (None for all)
         admin_id: Admin user ID for logging
         typing_chat_id: Chat ID to show typing indicator
+        bypass_cache: If True, skip cache for private admin commands
     """
     # Start typing indicator
     stop_typing = asyncio.Event()
@@ -58,7 +60,8 @@ async def _perform_analysis_and_send(
             chat_id=operation_chat_id,
             user_id=admin_id,
             operation_type="admin_analyze",
-            bypass_debounce=True
+            bypass_debounce=True,
+            bypass_cache=bypass_cache
         )
         
         # Stop typing indicator
@@ -285,7 +288,8 @@ def create_admin_router(config: Config) -> Router:
                     hours=hours,
                     chat_id_to_analyze=chat_id_to_analyze,
                     admin_id=callback.from_user.id,
-                    typing_chat_id=callback.message.chat.id
+                    typing_chat_id=callback.message.chat.id,
+                    bypass_cache=True  # Private chat - no cache
                 )
                 await callback.message.delete()
                 

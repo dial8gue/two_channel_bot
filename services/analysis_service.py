@@ -63,7 +63,8 @@ class AnalysisService:
         chat_id: int,
         user_id: int,
         operation_type: str,
-        bypass_debounce: bool = False
+        bypass_debounce: bool = False,
+        bypass_cache: bool = False
     ) -> tuple[str, bool]:
         """
         Analyze messages with chat-level debounce protection.
@@ -78,6 +79,7 @@ class AnalysisService:
             user_id: User ID for logging purposes
             operation_type: Operation identifier (e.g., "anal", "deep_anal")
             bypass_debounce: If True, skip debounce check (for admin users)
+            bypass_cache: If True, skip cache check and don't cache result (for private admin commands)
             
         Returns:
             Tuple of (analysis_result, from_cache) where:
@@ -99,7 +101,8 @@ class AnalysisService:
                     "user_id": user_id,
                     "chat_id": chat_id,
                     "hours": hours,
-                    "bypass_debounce": bypass_debounce
+                    "bypass_debounce": bypass_debounce,
+                    "bypass_cache": bypass_cache
                 }
             )
             
@@ -115,14 +118,18 @@ class AnalysisService:
                 logger.warning("No messages found for analysis period")
                 return "Нет сообщений для анализа за указанный период.", False
             
-            # Generate cache key and check cache
+            # Generate cache key and check cache (unless bypassing)
             cache_key = self._generate_cache_key(messages)
-            cached_result = await self.cache_manager.get(cache_key)
             
-            if cached_result:
-                # Return cached result without debounce check/set
-                logger.info("Returning cached analysis result (no debounce applied)")
-                return cached_result, True
+            if not bypass_cache:
+                cached_result = await self.cache_manager.get(cache_key)
+                
+                if cached_result:
+                    # Return cached result without debounce check/set
+                    logger.info("Returning cached analysis result (no debounce applied)")
+                    return cached_result, True
+            else:
+                logger.debug("Bypassing cache check for private admin command")
             
             # No cache hit - check and set debounce before making API call
             if not bypass_debounce:
@@ -159,12 +166,15 @@ class AnalysisService:
             logger.info("Performing new analysis with OpenAI")
             analysis_result = await self.openai_client.analyze_messages(messages)
             
-            # Cache the result
-            await self.cache_manager.set(
-                key=cache_key,
-                value=analysis_result,
-                ttl_minutes=self.cache_ttl_minutes
-            )
+            # Cache the result (unless bypassing)
+            if not bypass_cache:
+                await self.cache_manager.set(
+                    key=cache_key,
+                    value=analysis_result,
+                    ttl_minutes=self.cache_ttl_minutes
+                )
+            else:
+                logger.debug("Skipping cache set for private admin command")
             
             from_cache = False
             
