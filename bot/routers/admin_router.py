@@ -267,8 +267,8 @@ def create_admin_router(config: Config) -> Router:
             # Answer callback to remove loading state
             await callback.answer()
             
-            # Edit message to show processing
-            await callback.message.edit_text("⏳ Анализирую сообщения...")
+            # Delete the selection message - typing indicator is enough
+            await callback.message.delete()
             
             logger.info(
                 "Analysis callback received",
@@ -291,14 +291,13 @@ def create_admin_router(config: Config) -> Router:
                     typing_chat_id=callback.message.chat.id,
                     bypass_cache=True  # Private chat - no cache
                 )
-                await callback.message.delete()
                 
             except ValueError as e:
-                await callback.message.edit_text(f"⚠️ {str(e)}")
+                await callback.bot.send_message(callback.from_user.id, f"⚠️ {str(e)}")
                 
             except Exception as e:
                 logger.error(f"Analysis failed: {e}", exc_info=True)
-                await callback.message.edit_text("❌ Ошибка при анализе сообщений. Проверь логи для деталей.")
+                await callback.bot.send_message(callback.from_user.id, "❌ Ошибка при анализе сообщений. Проверь логи для деталей.")
                 
         except Exception as e:
             logger.error(
