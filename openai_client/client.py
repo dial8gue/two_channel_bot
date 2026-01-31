@@ -44,6 +44,7 @@ class OpenAIClient:
         """
         import httpx
         # Read timeout resets on each chunk received, so long generation won't be interrupted
+        client_kwargs = {"api_key": api_key}
         client_kwargs["timeout"] = httpx.Timeout(connect=30.0, read=60.0, write=30.0, pool=30.0)
         if base_url:
             client_kwargs["base_url"] = base_url
