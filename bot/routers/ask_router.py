@@ -310,6 +310,54 @@ async def _handle_question(
         raise
 
 
+async def _handle_private_question(
+    message: Message,
+    question: str,
+    openai_client: OpenAIClient
+) -> None:
+    """
+    Common logic for answering questions in admin's private chat (without group context).
+    
+    Args:
+        message: User message
+        question: Question text
+        openai_client: OpenAI client
+    """
+    stop_typing = asyncio.Event()
+    typing_task = asyncio.create_task(typing_loop(message.chat.id, message.bot, stop_typing))
+    
+    try:
+        answer = await openai_client.answer_question_simple(question)
+        
+        stop_typing.set()
+        typing_task.cancel()
+        
+        try:
+            await safe_reply(message, answer, parse_mode="Markdown")
+        except Exception as parse_error:
+            logger.warning(f"Markdown parsing error, trying HTML: {parse_error}")
+            try:
+                html_answer = MessageFormatter.convert_to_html(answer)
+                await safe_reply(message, html_answer, parse_mode="HTML")
+            except Exception as html_error:
+                logger.warning(f"HTML parsing error, sending plain text: {html_error}")
+                plain_answer = MessageFormatter.strip_formatting(answer)
+                await safe_reply(message, plain_answer)
+        
+        logger.info(
+            "Private question answered",
+            extra={
+                "user_id": message.from_user.id,
+                "answer_length": len(answer)
+            }
+        )
+        
+    except Exception:
+        stop_typing.set()
+        typing_task.cancel()
+        raise
+
+
 def create_ask_router(config: Config) -> Router:
     """
     Create and configure router for /ask command and bot mentions.
@@ -580,7 +628,6 @@ def create_ask_router(config: Config) -> Router:
             config: Bot configuration
         """
         try:
-            # Extract question from message
             command_text = message.text or ""
             question = command_text.split(maxsplit=1)[1] if len(command_text.split()) > 1 else ""
             
@@ -600,44 +647,7 @@ def create_ask_router(config: Config) -> Router:
                 }
             )
             
-            # Start typing indicator
-            stop_typing = asyncio.Event()
-            typing_task = asyncio.create_task(typing_loop(message.chat.id, message.bot, stop_typing))
-            
-            try:
-                # Call OpenAI directly without context
-                answer = await openai_client.answer_question_simple(question)
-                
-                # Stop typing indicator
-                stop_typing.set()
-                typing_task.cancel()
-                
-                # Send reply with fallback on parsing error
-                try:
-                    await safe_reply(message, answer, parse_mode="Markdown")
-                except Exception as parse_error:
-                    logger.warning(f"Markdown parsing error, trying HTML: {parse_error}")
-                    try:
-                        html_answer = MessageFormatter.convert_to_html(answer)
-                        await safe_reply(message, html_answer, parse_mode="HTML")
-                    except Exception as html_error:
-                        logger.warning(f"HTML parsing error, sending plain text: {html_error}")
-                        plain_answer = MessageFormatter.strip_formatting(answer)
-                        await safe_reply(message, plain_answer)
-                
-                logger.info(
-                    "/ask command in private chat completed",
-                    extra={
-                        "user_id": message.from_user.id,
-                        "answer_length": len(answer)
-                    }
-                )
-                
-            except Exception as e:
-                stop_typing.set()
-                typing_task.cancel()
-                logger.error(f"Error generating answer: {e}", exc_info=True)
-                await message.answer("❌ Ошибка при генерации ответа.")
+            await _handle_private_question(message, question, openai_client)
                 
         except Exception as e:
             logger.error(
@@ -649,5 +659,47 @@ def create_ask_router(config: Config) -> Router:
                 await message.answer("❌ Произошла ошибка при обработке вопроса.")
             except Exception:
                 pass
-    
+
+    @router.message(
+        lambda message: message.chat.type == ChatType.PRIVATE,
+        lambda message: message.from_user and message.from_user.id == config.admin_id,
+        lambda message: message.text and not message.text.startswith('/')
+    )
+    async def handle_private_text(
+        message: Message,
+        openai_client: OpenAIClient,
+        config: Config
+    ):
+        """
+        Handle plain text messages in admin's private chat as questions.
+        
+        Args:
+            message: Text message from admin
+            openai_client: OpenAI client
+            config: Bot configuration
+        """
+        try:
+            question = message.text.strip()
+            
+            logger.info(
+                "Received plain text in private chat",
+                extra={
+                    "user_id": message.from_user.id,
+                    "question_length": len(question)
+                }
+            )
+            
+            await _handle_private_question(message, question, openai_client)
+                
+        except Exception as e:
+            logger.error(
+                f"Error handling private text: {e}",
+                extra={"user_id": message.from_user.id if message.from_user else None},
+                exc_info=True
+            )
+            try:
+                await message.answer("❌ Произошла ошибка при обработке вопроса.")
+            except Exception:
+                pass
+
     return router
