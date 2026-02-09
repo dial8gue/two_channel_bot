@@ -57,45 +57,74 @@ async def _extract_image_description(message: Message, openai_client: OpenAIClie
     """
     Extract and describe image from message or its reply.
     
-    Checks for photo in the message itself first, then in the replied message.
-    Downloads the largest available photo and sends it to the vision model.
+    Checks for photo/sticker in the message itself first, then in the replied message.
+    Downloads the largest available photo (or sticker thumbnail) and sends it to the vision model.
     
     Args:
-        message: Telegram message (may contain photo or reply to photo)
+        message: Telegram message (may contain photo, sticker, or reply to photo/sticker)
         openai_client: OpenAI client with vision support
         
     Returns:
         Image description string or None if no image found
     """
-    # Determine which message has the photo
+    # Determine which message has the photo or sticker
     photo_message = None
+    sticker_message = None
+    
     if message.photo:
         photo_message = message
-    elif message.reply_to_message and message.reply_to_message.photo:
-        photo_message = message.reply_to_message
+    elif message.sticker:
+        sticker_message = message
+    elif message.reply_to_message:
+        if message.reply_to_message.photo:
+            photo_message = message.reply_to_message
+        elif message.reply_to_message.sticker:
+            sticker_message = message.reply_to_message
     
-    if not photo_message:
+    if not photo_message and not sticker_message:
         return None
     
     try:
-        # Get the largest photo (last in the list)
-        photo = photo_message.photo[-1]
-        
-        logger.info(
-            "Downloading image for vision",
-            extra={
-                "file_id": photo.file_id,
-                "width": photo.width,
-                "height": photo.height,
-                "file_size": photo.file_size
-            }
-        )
-        
-        # Download photo via Bot API
         from io import BytesIO
-        buf = BytesIO()
-        await message.bot.download(photo, destination=buf)
-        image_data = buf.getvalue()
+        
+        if photo_message:
+            # Get the largest photo (last in the list)
+            photo = photo_message.photo[-1]
+            
+            logger.info(
+                "Downloading image for vision",
+                extra={
+                    "file_id": photo.file_id,
+                    "width": photo.width,
+                    "height": photo.height,
+                    "file_size": photo.file_size
+                }
+            )
+            
+            buf = BytesIO()
+            await message.bot.download(photo, destination=buf)
+            image_data = buf.getvalue()
+        else:
+            # Sticker — use thumbnail
+            sticker = sticker_message.sticker
+            if not sticker.thumbnail:
+                # No thumbnail available, return emoji fallback
+                emoji = sticker.emoji or ""
+                set_name = sticker.set_name or ""
+                return f"Стикер {emoji} из набора \"{set_name}\"" if set_name else f"Стикер {emoji}"
+            
+            logger.info(
+                "Downloading sticker thumbnail for vision",
+                extra={
+                    "file_id": sticker.thumbnail.file_id,
+                    "sticker_emoji": sticker.emoji,
+                    "sticker_set": sticker.set_name
+                }
+            )
+            
+            buf = BytesIO()
+            await message.bot.download(sticker.thumbnail, destination=buf)
+            image_data = buf.getvalue()
         
         # Send to vision model for description
         description = await openai_client.describe_image(image_data)
@@ -280,8 +309,8 @@ def create_ask_router(config: Config) -> Router:
             # Remove /ask command from beginning
             question = command_text.split(maxsplit=1)[1] if len(command_text.split()) > 1 else ""
             
-            # If no question text but there's a photo, use default prompt
-            if not question.strip() and message.photo:
+            # If no question text but there's a photo or sticker, use default prompt
+            if not question.strip() and (message.photo or message.sticker):
                 question = "Что на этом изображении?"
             
             if not question.strip():
@@ -321,7 +350,7 @@ def create_ask_router(config: Config) -> Router:
     @router.message(
         F.reply_to_message,
         lambda message: message.chat.type in [ChatType.GROUP, ChatType.SUPERGROUP],
-        lambda message: message.text or (message.photo and message.caption)
+        lambda message: message.text or (message.photo and message.caption) or message.sticker
     )
     async def handle_reply_to_bot(
         message: Message,
@@ -335,6 +364,7 @@ def create_ask_router(config: Config) -> Router:
         Usage:
             Reply to bot message with question text
             Reply to bot message with photo + caption
+            Reply to bot message with sticker
             
         Args:
             message: Reply message
@@ -367,8 +397,8 @@ def create_ask_router(config: Config) -> Router:
             
             question = text.strip()
             
-            # If photo without text, use default question
-            if not question and message.photo:
+            # If photo or sticker without text, use default question
+            if not question and (message.photo or message.sticker):
                 question = "Что на этом изображении?"
             
             if not question:
@@ -404,7 +434,7 @@ def create_ask_router(config: Config) -> Router:
     
     @router.message(
         lambda message: message.chat.type in [ChatType.GROUP, ChatType.SUPERGROUP],
-        lambda message: message.text or (message.photo and message.caption)
+        lambda message: message.text or (message.photo and message.caption) or message.sticker
     )
     async def handle_mention(
         message: Message,
@@ -419,6 +449,7 @@ def create_ask_router(config: Config) -> Router:
             @botname question - ask bot a question
             Reply to message with @botname question - question with reply context
             Send photo with caption @botname question - question with image context
+            Send sticker as reply to @botname - question with sticker context
             
         Args:
             message: Message with mention
@@ -446,7 +477,7 @@ def create_ask_router(config: Config) -> Router:
                 # Not our message - skip to other handlers
                 raise SkipHandler()
             
-            if not question and message.photo:
+            if not question and (message.photo or message.sticker):
                 question = "Что на этом изображении?"
             
             if not question:

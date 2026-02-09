@@ -29,7 +29,7 @@ async def handle_group_message(message: Message, message_service: MessageService
     
     This handler:
     1. Filters messages from group and supergroup chats
-    2. Extracts message data
+    2. Extracts message data (text or sticker info)
     3. Saves message to database via MessageService
     4. Triggers cleanup of old messages
     
@@ -38,10 +38,22 @@ async def handle_group_message(message: Message, message_service: MessageService
         message_service: Service for message operations
     """
     try:
-        # Skip messages without text
-        if not message.text:
+        # Extract text content or sticker description
+        text = message.text
+        
+        if not text and message.sticker:
+            # Build sticker description for analysis
+            emoji = message.sticker.emoji or ""
+            set_name = message.sticker.set_name or ""
+            if set_name:
+                text = f"[стикер: {emoji} из набора \"{set_name}\"]"
+            else:
+                text = f"[стикер: {emoji}]"
+        
+        # Skip messages without text and without sticker
+        if not text:
             logger.debug(
-                "Skipping message without text",
+                "Skipping message without text or sticker",
                 extra={
                     "message_id": message.message_id,
                     "chat_id": message.chat.id
@@ -68,7 +80,7 @@ async def handle_group_message(message: Message, message_service: MessageService
                 "chat_id": message.chat.id,
                 "user_id": user_id,
                 "username": username,
-                "text_length": len(message.text)
+                "text_length": len(text)
             }
         )
         
@@ -78,7 +90,7 @@ async def handle_group_message(message: Message, message_service: MessageService
             chat_id=message.chat.id,
             user_id=user_id,
             username=username,
-            text=message.text,
+            text=text,
             timestamp=timestamp,
             reactions={},  # Reactions will be updated separately
             reply_to_message_id=reply_to_message_id
