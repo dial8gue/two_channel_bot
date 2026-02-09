@@ -258,7 +258,7 @@ class MessageFormatter:
             """Build message header."""
             fmt = get_format(mode)
             b_open, b_close = fmt["bold"]
-            return f"📊 {b_open}Анализ сообщений за последние {period_hours} ч{b_close}\n\n"
+            return f"📊 {b_open}Анализ сообщений за {period_hours} ч{b_close}\n\n"
         
         def build_footer(mode: str) -> str:
             """Build message footer (only for cached results)."""

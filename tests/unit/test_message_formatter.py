@@ -507,7 +507,7 @@ class TestFormatAnalysisResult:
         assert isinstance(result, str)
         
         # Should contain header with Markdown formatting
-        assert "📊 *Анализ сообщений за последние 24 ч*" in result
+        assert "📊 *Анализ сообщений за 24 ч*" in result
         
         # Should NOT escape special characters in analysis content
         # (LLM already provides properly formatted Markdown)
@@ -530,7 +530,7 @@ class TestFormatAnalysisResult:
         assert isinstance(result, str)
         
         # Should contain header with HTML formatting
-        assert "📊 <b>Анализ сообщений за последние 12 ч</b>" in result
+        assert "📊 <b>Анализ сообщений за 12 ч</b>" in result
         
         # Should escape HTML special characters
         assert "&lt;tag&gt;" in result
@@ -553,7 +553,7 @@ class TestFormatAnalysisResult:
         assert isinstance(result, str)
         
         # Should contain header without formatting
-        assert "📊 Анализ сообщений за последние 6 ч" in result
+        assert "📊 Анализ сообщений за 6 ч" in result
         
         # Should strip formatting from analysis content
         assert "bold" in result
@@ -761,10 +761,10 @@ class TestFormatAnalysisResult:
     
     def test_format_exactly_at_length_boundary(self):
         """Test formatting when result is exactly at max_length boundary."""
-        # Header for plain text mode: "📊 Анализ сообщений за последние 24 ч\n\n"
+        # Header for plain text mode: "📊 Анализ сообщений за 24 ч\n\n"
         # No footer when from_cache=False
         
-        header_len = len("📊 Анализ сообщений за последние 24 ч\n\n")
+        header_len = len("📊 Анализ сообщений за 24 ч\n\n")
         analysis_len = 4096 - header_len
         
         analysis = "A" * analysis_len
@@ -784,7 +784,7 @@ class TestFormatAnalysisResult:
     def test_format_just_over_length_boundary(self):
         """Test formatting when result is just over max_length boundary."""
         # No footer when from_cache=False
-        header_len = len("📊 Анализ сообщений за последние 24 ч\n\n")
+        header_len = len("📊 Анализ сообщений за 24 ч\n\n")
         analysis_len = 4096 - header_len + 10  # 10 chars over
         
         analysis = "B" * analysis_len

@@ -319,7 +319,7 @@ class OpenAIClient:
                 }
             )
             
-            return answer or "Не удалось сформировать ответ."
+            return answer or "Что-то пошло не так! Господи помилуй."
             
         except RateLimitError as e:
             logger.error("OpenAI rate limit exceeded", exc_info=True)
@@ -426,7 +426,7 @@ class OpenAIClient:
                 }
             )
             
-            return answer or "Не удалось сформировать ответ."
+            return answer or "Что-то пошло не так! Господи помилуй."
             
         except RateLimitError as e:
             logger.error("OpenAI rate limit exceeded", exc_info=True)
