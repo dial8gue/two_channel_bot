@@ -317,6 +317,7 @@ async def _handle_private_question(
 ) -> None:
     """
     Common logic for answering questions in admin's private chat (without group context).
+    Supports image recognition via vision when photo is attached.
     
     Args:
         message: User message
@@ -327,7 +328,18 @@ async def _handle_private_question(
     typing_task = asyncio.create_task(typing_loop(message.chat.id, message.bot, stop_typing))
     
     try:
-        answer = await openai_client.answer_question_simple(question)
+        # Try to extract and describe image if vision is enabled
+        image_description = None
+        if openai_client.vision_enabled:
+            image_description = await _extract_image_description(message, openai_client)
+        
+        # Build full question with image context
+        if image_description:
+            full_question = f"{question}\n\n[Изображение: {image_description}]"
+        else:
+            full_question = question
+        
+        answer = await openai_client.answer_question_simple(full_question)
         
         stop_typing.set()
         typing_task.cancel()
@@ -663,7 +675,7 @@ def create_ask_router(config: Config) -> Router:
     @router.message(
         lambda message: message.chat.type == ChatType.PRIVATE,
         lambda message: message.from_user and message.from_user.id == config.admin_id,
-        lambda message: message.text and not message.text.startswith('/')
+        lambda message: (message.text and not message.text.startswith('/')) or message.photo or message.sticker or message.animation
     )
     async def handle_private_text(
         message: Message,
@@ -671,21 +683,29 @@ def create_ask_router(config: Config) -> Router:
         config: Config
     ):
         """
-        Handle plain text messages in admin's private chat as questions.
+        Handle plain text or photo messages in admin's private chat as questions.
         
         Args:
-            message: Text message from admin
+            message: Text or photo message from admin
             openai_client: OpenAI client
             config: Bot configuration
         """
         try:
-            question = message.text.strip()
+            question = (message.text or message.caption or "").strip()
+            
+            # If photo/sticker/GIF without text, use default prompt
+            if not question and (message.photo or message.sticker or message.animation):
+                question = "Что на этом изображении?"
+            
+            if not question:
+                return
             
             logger.info(
-                "Received plain text in private chat",
+                "Received message in private chat",
                 extra={
                     "user_id": message.from_user.id,
-                    "question_length": len(question)
+                    "question_length": len(question),
+                    "has_photo": bool(message.photo)
                 }
             )
             
