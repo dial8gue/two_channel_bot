@@ -67,10 +67,11 @@ async def _extract_image_description(message: Message, openai_client: OpenAIClie
     Returns:
         Image description string or None if no image found
     """
-    # Determine which message has the photo, sticker, or animation
+    # Determine which message has the photo, sticker, animation, or video
     photo_message = None
     sticker_message = None
     animation_message = None
+    video_message = None
     
     if message.photo:
         photo_message = message
@@ -78,6 +79,8 @@ async def _extract_image_description(message: Message, openai_client: OpenAIClie
         sticker_message = message
     elif message.animation:
         animation_message = message
+    elif message.video:
+        video_message = message
     elif message.reply_to_message:
         if message.reply_to_message.photo:
             photo_message = message.reply_to_message
@@ -85,8 +88,10 @@ async def _extract_image_description(message: Message, openai_client: OpenAIClie
             sticker_message = message.reply_to_message
         elif message.reply_to_message.animation:
             animation_message = message.reply_to_message
+        elif message.reply_to_message.video:
+            video_message = message.reply_to_message
     
-    if not photo_message and not sticker_message and not animation_message:
+    if not photo_message and not sticker_message and not animation_message and not video_message:
         return None
     
     try:
@@ -145,6 +150,24 @@ async def _extract_image_description(message: Message, openai_client: OpenAIClie
             
             buf = BytesIO()
             await message.bot.download(animation.thumbnail, destination=buf)
+            image_data = buf.getvalue()
+        elif video_message:
+            # Video — use thumbnail
+            video = video_message.video
+            if not video.thumbnail:
+                return "[Видео]"
+            
+            logger.info(
+                "Downloading video thumbnail for vision",
+                extra={
+                    "file_id": video.thumbnail.file_id,
+                    "file_name": video.file_name,
+                    "duration": video.duration
+                }
+            )
+            
+            buf = BytesIO()
+            await message.bot.download(video.thumbnail, destination=buf)
             image_data = buf.getvalue()
         
         # Send to vision model for description
