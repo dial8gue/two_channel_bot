@@ -111,7 +111,8 @@ def build_question_user_prompt(
     question: str,
     messages_text: str,
     reply_context: str | None = None,
-    asking_user: str | None = None
+    asking_user: str | None = None,
+    image_description: str | None = None
 ) -> str:
     """Build user prompt for answering a question."""
     prompt_parts = []
@@ -121,10 +122,24 @@ def build_question_user_prompt(
     
     prompt_parts.append(f"ВОПРОС: {question}")
     
+    if image_description:
+        prompt_parts.append(f"\nПРИКРЕПЛЁННОЕ ИЗОБРАЖЕНИЕ (описание):\n{image_description}")
+    
     if reply_context:
         prompt_parts.append(f"\nЦИТИРУЕМОЕ СООБЩЕНИЕ:\n{reply_context}")
     
     prompt_parts.append(f"\nКОНТЕКСТ ЧАТА (сообщения вокруг цитаты):\n{messages_text}")
-    prompt_parts.append("\nОтветь на вопрос кратко (максимум 5 предложений), учитывая контекст чата.")
+    prompt_parts.append("\nОтветь на вопрос кратко (максимум 5 предложений), учитывая контекст чата и описание изображения, если оно есть.")
     
     return "\n".join(prompt_parts)
+
+
+# System prompt for image description (vision model)
+IMAGE_DESCRIPTION_SYSTEM_PROMPT = """Ты — помощник, который описывает изображения.
+
+ПРАВИЛА:
+1. Опиши содержимое изображения кратко и информативно (2-4 предложения)
+2. Если на изображении есть текст — обязательно процитируй его
+3. Если это мем, скриншот, график или схема — укажи это
+4. Отвечай на русском языке
+5. Не додумывай то, чего нет на изображении"""

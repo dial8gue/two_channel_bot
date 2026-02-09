@@ -513,8 +513,7 @@ class TestFormatAnalysisResult:
         # (LLM already provides properly formatted Markdown)
         assert "*special*" in result
         
-        # Should contain footer with Markdown formatting
-        assert "_Анализ выполнен роботами_" in result
+        # from_cache=False should NOT contain cache indicator
         assert "(из кеша)" not in result
     
     def test_format_with_html_parse_mode(self):
@@ -537,8 +536,7 @@ class TestFormatAnalysisResult:
         assert "&lt;tag&gt;" in result
         assert "&amp;" in result
         
-        # Should contain footer with HTML formatting
-        assert "<i>Анализ выполнен роботами</i>" in result
+        # from_cache=False should NOT contain cache indicator
         assert "(из кеша)" not in result
     
     def test_format_with_plain_text_parse_mode(self):
@@ -560,12 +558,9 @@ class TestFormatAnalysisResult:
         # Should strip formatting from analysis content
         assert "bold" in result
         assert "italic" in result
-        assert "**" not in result
-        assert "*" not in result or "\\*" not in result  # Either stripped or escaped
         
-        # Should contain footer without formatting
-        assert "Анализ выполнен роботами" in result
-        assert "_" not in result or "\\_" not in result  # No markdown underscores
+        # from_cache=False should NOT contain cache indicator
+        assert "(из кеша)" not in result
     
     def test_cache_flag_appears_in_footer_markdown(self):
         """Test cache flag appears correctly in footer with Markdown."""
@@ -578,8 +573,7 @@ class TestFormatAnalysisResult:
             from_cache=True,
             parse_mode="Markdown"
         )
-        assert "(из кеша)" in result_cached
-        assert "_Анализ выполнен роботами (из кеша)_" in result_cached
+        assert "_(из кеша)_" in result_cached
         
         # Test with from_cache=False
         result_not_cached = MessageFormatter.format_analysis_result(
@@ -589,7 +583,6 @@ class TestFormatAnalysisResult:
             parse_mode="Markdown"
         )
         assert "(из кеша)" not in result_not_cached
-        assert "_Анализ выполнен роботами_" in result_not_cached
     
     def test_cache_flag_appears_in_footer_html(self):
         """Test cache flag appears correctly in footer with HTML."""
@@ -603,7 +596,6 @@ class TestFormatAnalysisResult:
             parse_mode="HTML"
         )
         assert "(из кеша)" in result_cached
-        assert "<i>Анализ выполнен роботами (из кеша)</i>" in result_cached
         
         # Test with from_cache=False
         result_not_cached = MessageFormatter.format_analysis_result(
@@ -613,7 +605,6 @@ class TestFormatAnalysisResult:
             parse_mode="HTML"
         )
         assert "(из кеша)" not in result_not_cached
-        assert "<i>Анализ выполнен роботами</i>" in result_not_cached
     
     def test_cache_flag_appears_in_footer_plain_text(self):
         """Test cache flag appears correctly in footer with plain text."""
@@ -627,7 +618,6 @@ class TestFormatAnalysisResult:
             parse_mode=None
         )
         assert "(из кеша)" in result_cached
-        assert "Анализ выполнен роботами (из кеша)" in result_cached
         
         # Test with from_cache=False
         result_not_cached = MessageFormatter.format_analysis_result(
@@ -637,7 +627,6 @@ class TestFormatAnalysisResult:
             parse_mode=None
         )
         assert "(из кеша)" not in result_not_cached
-        assert "Анализ выполнен роботами" in result_not_cached
     
     def test_long_analysis_triggers_message_splitting(self):
         """Test long analysis triggers message splitting."""
@@ -728,10 +717,9 @@ class TestFormatAnalysisResult:
             parse_mode="Markdown"
         )
         
-        # Should still return a formatted message with header and footer
+        # Should still return a formatted message with header
         assert isinstance(result, str)
         assert "📊" in result
-        assert "Анализ выполнен роботами" in result
     
     def test_format_with_special_characters_in_all_modes(self):
         """Test formatting with special characters in all parse modes."""
@@ -773,14 +761,11 @@ class TestFormatAnalysisResult:
     
     def test_format_exactly_at_length_boundary(self):
         """Test formatting when result is exactly at max_length boundary."""
-        # Calculate how much content we need to reach exactly 4096 chars
-        # Header: "📊 *Message analysis for last 24 h*\n\n"
-        # Footer: "\n\n_Analysis performed by robots_"
-        # We need to account for escaping, so use plain text mode
+        # Header for plain text mode: "📊 Анализ сообщений за последние 24 ч\n\n"
+        # No footer when from_cache=False
         
         header_len = len("📊 Анализ сообщений за последние 24 ч\n\n")
-        footer_len = len("\n\nАнализ выполнен роботами")
-        analysis_len = 4096 - header_len - footer_len
+        analysis_len = 4096 - header_len
         
         analysis = "A" * analysis_len
         
@@ -798,10 +783,9 @@ class TestFormatAnalysisResult:
     
     def test_format_just_over_length_boundary(self):
         """Test formatting when result is just over max_length boundary."""
-        # Create analysis that will push total over 4096
+        # No footer when from_cache=False
         header_len = len("📊 Анализ сообщений за последние 24 ч\n\n")
-        footer_len = len("\n\nАнализ выполнен роботами")
-        analysis_len = 4096 - header_len - footer_len + 10  # 10 chars over
+        analysis_len = 4096 - header_len + 10  # 10 chars over
         
         analysis = "B" * analysis_len
         

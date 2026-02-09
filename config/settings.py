@@ -60,6 +60,11 @@ class Config:
     inline_debounce_seconds: int
     inline_max_tokens: int
     
+    # Vision (image recognition)
+    vision_model: str
+    vision_enabled: bool
+    vision_max_tokens: int
+    
     @classmethod
     def from_env(cls) -> "Config":
         """
@@ -100,6 +105,9 @@ class Config:
         timezone = cls._get_validated_timezone_env("TIMEZONE", default=None)
         inline_debounce_seconds = cls._get_int_env("INLINE_DEBOUNCE_SECONDS", default=3600)  # 1 hour
         inline_max_tokens = cls._get_int_env("INLINE_MAX_TOKENS", default=500)
+        vision_model = os.getenv("VISION_MODEL", "google/gemini-2.5-flash")
+        vision_enabled = cls._get_bool_env("VISION_ENABLED", default=True)
+        vision_max_tokens = cls._get_int_env("VISION_MAX_TOKENS", default=2000)
         
         # Validate positive values
         cls._validate_positive("MAX_TOKENS", max_tokens)
@@ -113,6 +121,7 @@ class Config:
         cls._validate_positive("MAX_MESSAGE_LENGTH", max_message_length)
         cls._validate_positive("INLINE_DEBOUNCE_SECONDS", inline_debounce_seconds)
         cls._validate_positive("INLINE_MAX_TOKENS", inline_max_tokens)
+        cls._validate_positive("VISION_MAX_TOKENS", vision_max_tokens)
         
         # Validate parse mode
         valid_parse_modes = ["Markdown", "HTML", "None", None]
@@ -143,6 +152,9 @@ class Config:
             timezone=timezone,
             inline_debounce_seconds=inline_debounce_seconds,
             inline_max_tokens=inline_max_tokens,
+            vision_model=vision_model,
+            vision_enabled=vision_enabled,
+            vision_max_tokens=vision_max_tokens,
         )
     
     @staticmethod

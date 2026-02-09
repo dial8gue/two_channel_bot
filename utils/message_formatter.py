@@ -351,6 +351,11 @@ class MessageFormatter:
                 status = "✅ Включен" if stats['collection_enabled'] else "❌ Выключен"
                 message_parts.append(f"🔄 Сбор сообщений: {status}")
             
+            # Special case for vision_enabled
+            if 'vision_enabled' in stats:
+                status = "✅ Включено" if stats['vision_enabled'] else "❌ Выключено"
+                message_parts.append(f"🖼 Распознавание изображений: {status}")
+            
             logger.debug("Formatted statistics message")
             return "\n".join(message_parts)
             

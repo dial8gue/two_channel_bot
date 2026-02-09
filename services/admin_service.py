@@ -19,6 +19,7 @@ class AdminService:
     CONFIG_ANALYSIS_PERIOD = "analysis_period_hours"
     CONFIG_COLLECTION_ENABLED = "collection_enabled"
     CONFIG_OPENAI_MODEL = "openai_model"
+    CONFIG_VISION_ENABLED = "vision_enabled"
     
     def __init__(
         self,
@@ -261,6 +262,50 @@ class AdminService:
             logger.error(f"Failed to get OpenAI model: {e}", exc_info=True)
             return None
     
+    async def toggle_vision(self, enabled: bool) -> None:
+        """
+        Enable or disable image recognition (vision).
+        
+        Args:
+            enabled: True to enable vision, False to disable
+        """
+        try:
+            await self.config_repository.set(
+                key=self.CONFIG_VISION_ENABLED,
+                value="true" if enabled else "false"
+            )
+            
+            status = "enabled" if enabled else "disabled"
+            logger.info(
+                f"Vision {status}",
+                extra={"vision_enabled": enabled}
+            )
+            
+        except Exception as e:
+            logger.error(
+                f"Failed to toggle vision: {e}",
+                extra={"enabled": enabled},
+                exc_info=True
+            )
+            raise
+    
+    async def is_vision_enabled(self) -> bool:
+        """
+        Check if image recognition (vision) is enabled.
+        
+        Returns:
+            True if vision is enabled, False otherwise (defaults to True)
+        """
+        try:
+            value = await self.config_repository.get(self.CONFIG_VISION_ENABLED)
+            if value is None:
+                return True
+            return value.lower() == "true"
+            
+        except Exception as e:
+            logger.error(f"Failed to check vision status: {e}", exc_info=True)
+            return True
+    
     async def get_stats(self) -> Dict[str, Any]:
         """
         Get database statistics.
@@ -329,6 +374,9 @@ class AdminService:
             # Get OpenAI model setting
             openai_model = await self.get_openai_model()
             stats['openai_model'] = openai_model if openai_model else "Default (from env)"
+            
+            # Get vision setting
+            stats['vision_enabled'] = await self.is_vision_enabled()
             
             logger.info(
                 "Statistics gathered successfully",

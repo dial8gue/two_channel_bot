@@ -249,7 +249,8 @@ class AnalysisService:
         reply_context: Optional[str] = None,
         reply_timestamp: Optional[datetime] = None,
         bypass_debounce: bool = False,
-        asking_user: Optional[str] = None
+        asking_user: Optional[str] = None,
+        image_description: Optional[str] = None
     ) -> str:
         """
         Answer user question with spam protection (debounce).
@@ -262,6 +263,7 @@ class AnalysisService:
             reply_timestamp: Optional timestamp of quoted message for context selection
             bypass_debounce: Skip debounce check (for admin)
             asking_user: Optional username of the person asking
+            image_description: Optional description of attached image
             
         Returns:
             Answer to the question
@@ -331,7 +333,8 @@ class AnalysisService:
                 messages=messages,
                 reply_context=reply_context,
                 reply_timestamp=reply_timestamp,
-                asking_user=asking_user
+                asking_user=asking_user,
+                image_description=image_description
             )
             
             logger.info(

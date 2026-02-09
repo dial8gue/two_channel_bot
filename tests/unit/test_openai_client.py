@@ -83,9 +83,9 @@ class TestOpenAIClient:
         openai_client_with_timezone,
         test_messages
     ):
-        """Test _build_prompt formats message timestamps with configured timezone."""
+        """Test _format_messages_for_prompt formats message timestamps with configured timezone."""
         # Act
-        prompt = openai_client_with_timezone._build_prompt(test_messages)
+        prompt = openai_client_with_timezone._format_messages_for_prompt(test_messages)
         
         # Assert
         # Moscow is UTC+3, so 10:00 UTC = 13:00 MSK, 14:30 UTC = 17:30 MSK
@@ -98,9 +98,9 @@ class TestOpenAIClient:
         openai_client_without_timezone,
         test_messages
     ):
-        """Test _build_prompt uses UTC when timezone is None."""
+        """Test _format_messages_for_prompt uses UTC when timezone is None."""
         # Act
-        prompt = openai_client_without_timezone._build_prompt(test_messages)
+        prompt = openai_client_without_timezone._format_messages_for_prompt(test_messages)
         
         # Assert
         # Should remain in UTC
@@ -112,7 +112,7 @@ class TestOpenAIClient:
         self,
         openai_client_with_timezone
     ):
-        """Test _build_prompt sorts messages chronologically."""
+        """Test _format_messages_for_prompt sorts messages chronologically."""
         # Arrange - messages in reverse order
         messages = [
             MessageModel(
@@ -138,7 +138,7 @@ class TestOpenAIClient:
         ]
         
         # Act
-        prompt = openai_client_with_timezone._build_prompt(messages)
+        prompt = openai_client_with_timezone._format_messages_for_prompt(messages)
         
         # Assert - should be sorted by timestamp
         first_msg_pos = prompt.find("First message")

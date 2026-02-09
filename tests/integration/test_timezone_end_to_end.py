@@ -169,7 +169,7 @@ class TestTimezoneEndToEnd:
                 api_key="test_key",
                 timezone=timezone
             )
-            captured_prompt = client._build_prompt(messages)
+            captured_prompt = client._format_messages_for_prompt(messages)
             return "Test analysis result"
         
         mock_openai_client = AsyncMock()
@@ -239,7 +239,7 @@ class TestTimezoneEndToEnd:
                 api_key="test_key",
                 timezone=None
             )
-            captured_prompt = client._build_prompt(messages)
+            captured_prompt = client._format_messages_for_prompt(messages)
             return "Test analysis result"
         
         mock_openai_client = AsyncMock()

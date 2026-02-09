@@ -10,7 +10,7 @@ from aiogram.enums import ChatType
 from aiogram.dispatcher.event.bases import SkipHandler
 
 from services.analysis_service import AnalysisService
-from openai_client.client import OpenAIClient
+from openai_client.client import OpenAIClient, OpenAIClientError
 from utils.message_formatter import MessageFormatter
 from utils.telegram_sender import safe_reply, typing_loop
 from config.settings import Config
@@ -51,6 +51,68 @@ def _check_bot_mention(text: str, bot_username: str) -> tuple[bool, str]:
         return True, question
     
     return False, ""
+
+
+async def _extract_image_description(message: Message, openai_client: OpenAIClient) -> str | None:
+    """
+    Extract and describe image from message or its reply.
+    
+    Checks for photo in the message itself first, then in the replied message.
+    Downloads the largest available photo and sends it to the vision model.
+    
+    Args:
+        message: Telegram message (may contain photo or reply to photo)
+        openai_client: OpenAI client with vision support
+        
+    Returns:
+        Image description string or None if no image found
+    """
+    # Determine which message has the photo
+    photo_message = None
+    if message.photo:
+        photo_message = message
+    elif message.reply_to_message and message.reply_to_message.photo:
+        photo_message = message.reply_to_message
+    
+    if not photo_message:
+        return None
+    
+    try:
+        # Get the largest photo (last in the list)
+        photo = photo_message.photo[-1]
+        
+        logger.info(
+            "Downloading image for vision",
+            extra={
+                "file_id": photo.file_id,
+                "width": photo.width,
+                "height": photo.height,
+                "file_size": photo.file_size
+            }
+        )
+        
+        # Download photo via Bot API
+        from io import BytesIO
+        buf = BytesIO()
+        await message.bot.download(photo, destination=buf)
+        image_data = buf.getvalue()
+        
+        # Send to vision model for description
+        description = await openai_client.describe_image(image_data)
+        
+        logger.info(
+            "Image described successfully",
+            extra={"description_length": len(description)}
+        )
+        
+        return description
+        
+    except OpenAIClientError as e:
+        logger.warning(f"Failed to describe image: {e}")
+        return None
+    except Exception as e:
+        logger.error(f"Error extracting image: {e}", exc_info=True)
+        return None
 
 
 async def _handle_question(
@@ -102,6 +164,13 @@ async def _handle_question(
     typing_task = asyncio.create_task(typing_loop(message.chat.id, message.bot, stop_typing))
     
     try:
+        # Try to extract and describe image if vision is enabled
+        image_description = None
+        openai_client = analysis_service.openai_client
+        
+        if openai_client.vision_enabled:
+            image_description = await _extract_image_description(message, openai_client)
+        
         # Call service with debounce protection
         answer = await analysis_service.answer_question_with_debounce(
             question=question,
@@ -110,7 +179,8 @@ async def _handle_question(
             reply_context=reply_context,
             reply_timestamp=reply_timestamp,
             bypass_debounce=is_admin,
-            asking_user=asking_user
+            asking_user=asking_user,
+            image_description=image_description
         )
         
         # Stop typing indicator
@@ -194,6 +264,7 @@ def create_ask_router(config: Config) -> Router:
         Usage:
             /ask <question> - ask bot a question
             Reply to message with /ask <question> - question with reply context
+            Send photo with caption /ask <question> - question with image context
             
         Args:
             message: Command message
@@ -204,10 +275,14 @@ def create_ask_router(config: Config) -> Router:
             # Check if user is admin
             is_admin = message.from_user.id == config.admin_id
             
-            # Extract question from message
-            command_text = message.text or ""
+            # Extract question from message (text or caption for photos)
+            command_text = message.text or message.caption or ""
             # Remove /ask command from beginning
             question = command_text.split(maxsplit=1)[1] if len(command_text.split()) > 1 else ""
+            
+            # If no question text but there's a photo, use default prompt
+            if not question.strip() and message.photo:
+                question = "Что на этом изображении?"
             
             if not question.strip():
                 await message.answer(
@@ -244,9 +319,9 @@ def create_ask_router(config: Config) -> Router:
                 pass
     
     @router.message(
-        F.text,
         F.reply_to_message,
-        lambda message: message.chat.type in [ChatType.GROUP, ChatType.SUPERGROUP]
+        lambda message: message.chat.type in [ChatType.GROUP, ChatType.SUPERGROUP],
+        lambda message: message.text or (message.photo and message.caption)
     )
     async def handle_reply_to_bot(
         message: Message,
@@ -259,6 +334,7 @@ def create_ask_router(config: Config) -> Router:
         
         Usage:
             Reply to bot message with question text
+            Reply to bot message with photo + caption
             
         Args:
             message: Reply message
@@ -267,7 +343,7 @@ def create_ask_router(config: Config) -> Router:
             config: Bot configuration
         """
         try:
-            text = message.text or ""
+            text = message.text or message.caption or ""
             
             # Ignore commands (starting with /)
             if text.startswith('/'):
@@ -290,6 +366,10 @@ def create_ask_router(config: Config) -> Router:
                     raise SkipHandler()
             
             question = text.strip()
+            
+            # If photo without text, use default question
+            if not question and message.photo:
+                question = "Что на этом изображении?"
             
             if not question:
                 raise SkipHandler()
@@ -323,8 +403,8 @@ def create_ask_router(config: Config) -> Router:
             )
     
     @router.message(
-        F.text,
-        lambda message: message.chat.type in [ChatType.GROUP, ChatType.SUPERGROUP]
+        lambda message: message.chat.type in [ChatType.GROUP, ChatType.SUPERGROUP],
+        lambda message: message.text or (message.photo and message.caption)
     )
     async def handle_mention(
         message: Message,
@@ -338,6 +418,7 @@ def create_ask_router(config: Config) -> Router:
         Usage:
             @botname question - ask bot a question
             Reply to message with @botname question - question with reply context
+            Send photo with caption @botname question - question with image context
             
         Args:
             message: Message with mention
@@ -346,7 +427,7 @@ def create_ask_router(config: Config) -> Router:
             config: Bot configuration
         """
         try:
-            text = message.text or ""
+            text = message.text or message.caption or ""
             
             # Ignore commands (starting with /)
             if text.startswith('/'):
@@ -364,6 +445,9 @@ def create_ask_router(config: Config) -> Router:
             if not has_mention:
                 # Not our message - skip to other handlers
                 raise SkipHandler()
+            
+            if not question and message.photo:
+                question = "Что на этом изображении?"
             
             if not question:
                 await message.answer(

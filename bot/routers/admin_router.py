@@ -619,5 +619,43 @@ def create_admin_router(config: Config) -> Router:
             )
             await message.answer("❌ Ошибка при изменении модели.")
     
+    @router.message(Command("toggle_vision"), admin_filter)
+    async def cmd_toggle_vision(
+        message: Message,
+        admin_service: AdminService,
+        openai_client: OpenAIClient
+    ):
+        """
+        Handle /toggle_vision command to enable/disable image recognition.
+        
+        Args:
+            message: Command message from admin
+            admin_service: Service for admin operations
+            openai_client: OpenAI client instance
+        """
+        try:
+            # Get current state and toggle
+            current = await admin_service.is_vision_enabled()
+            new_state = not current
+            
+            await admin_service.toggle_vision(new_state)
+            openai_client.vision_enabled = new_state
+            
+            status = "включено ✅" if new_state else "выключено ❌"
+            await message.answer(f"🖼 Распознавание изображений: {status}")
+            
+            logger.info(
+                "Vision toggled",
+                extra={"admin_id": message.from_user.id, "vision_enabled": new_state}
+            )
+            
+        except Exception as e:
+            logger.error(
+                f"Error toggling vision: {e}",
+                extra={"admin_id": message.from_user.id if message.from_user else None},
+                exc_info=True
+            )
+            await message.answer("❌ Ошибка при переключении распознавания изображений.")
+    
     
     return router

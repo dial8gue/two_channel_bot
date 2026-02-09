@@ -1,6 +1,7 @@
 """
 OpenAI client for analyzing Telegram messages.
 """
+import base64
 import logging
 from datetime import datetime
 from typing import List, Optional
@@ -13,6 +14,7 @@ from .prompts import (
     QUESTION_CLASSIFIER_SYSTEM_PROMPT,
     QUESTION_WITH_CONTEXT_SYSTEM_PROMPT,
     SIMPLE_QUESTION_SYSTEM_PROMPT,
+    IMAGE_DESCRIPTION_SYSTEM_PROMPT,
     build_analysis_user_prompt,
     build_question_user_prompt,
 )
@@ -29,7 +31,7 @@ class OpenAIClientError(Exception):
 class OpenAIClient:
     """Client for interacting with OpenAI API to analyze messages."""
     
-    def __init__(self, api_key: str, base_url: str = None, model: str = "gpt-4o-mini", classifier_model: str = "deepseek/deepseek-chat", max_tokens: int = 4000, inline_max_tokens: int = 500, timezone: Optional[str] = None):
+    def __init__(self, api_key: str, base_url: str = None, model: str = "gpt-4o-mini", classifier_model: str = "deepseek/deepseek-chat", max_tokens: int = 4000, inline_max_tokens: int = 500, timezone: Optional[str] = None, vision_model: str = "google/gemini-2.5-flash", vision_enabled: bool = True, vision_max_tokens: int = 2000):
         """
         Initialize OpenAI client.
         
@@ -41,6 +43,9 @@ class OpenAIClient:
             max_tokens: Maximum tokens for API requests (analysis)
             inline_max_tokens: Maximum tokens for inline question answers
             timezone: Optional IANA timezone identifier for timestamp formatting
+            vision_model: Model to use for image recognition
+            vision_enabled: Whether image recognition is enabled
+            vision_max_tokens: Maximum tokens for vision API requests
         """
         import httpx
         # Read timeout resets on each chunk received, so long generation won't be interrupted
@@ -56,6 +61,9 @@ class OpenAIClient:
         self.max_tokens = max_tokens
         self.inline_max_tokens = inline_max_tokens
         self.timezone = timezone
+        self.vision_model = vision_model
+        self.vision_enabled = vision_enabled
+        self.vision_max_tokens = vision_max_tokens
         logger.info(
             "OpenAI client initialized",
             extra={
@@ -64,7 +72,10 @@ class OpenAIClient:
                 "max_tokens": max_tokens,
                 "inline_max_tokens": inline_max_tokens,
                 "base_url": base_url or "default",
-                "timezone": timezone or "UTC"
+                "timezone": timezone or "UTC",
+                "vision_model": vision_model,
+                "vision_enabled": vision_enabled,
+                "vision_max_tokens": vision_max_tokens
             }
         )
     
@@ -244,7 +255,8 @@ class OpenAIClient:
         messages: List[MessageModel],
         reply_context: Optional[str] = None,
         reply_timestamp: Optional[datetime] = None,
-        asking_user: Optional[str] = None
+        asking_user: Optional[str] = None,
+        image_description: Optional[str] = None
     ) -> str:
         """
         Answer user's question based on chat context.
@@ -255,6 +267,7 @@ class OpenAIClient:
             reply_context: Optional context from quoted message
             reply_timestamp: Optional timestamp of quoted message for context selection
             asking_user: Optional username of the person asking
+            image_description: Optional description of attached image
             
         Returns:
             Answer to the question (max 5 sentences)
@@ -265,7 +278,7 @@ class OpenAIClient:
         try:
             needs_context = await self._needs_chat_context(question, reply_context is not None)
             
-            if not needs_context:
+            if not needs_context and not image_description:
                 logger.info(
                     "Question classified as general, answering without context",
                     extra={"question_length": len(question)}
@@ -273,7 +286,7 @@ class OpenAIClient:
                 return await self.answer_question_simple(question)
             
             messages_text = self._get_context_messages_text(messages, reply_timestamp)
-            prompt = build_question_user_prompt(question, messages_text, reply_context, asking_user)
+            prompt = build_question_user_prompt(question, messages_text, reply_context, asking_user, image_description)
             
             logger.info(
                 "Sending question request to OpenAI",
@@ -281,7 +294,8 @@ class OpenAIClient:
                     "question_length": len(question),
                     "message_count": len(messages),
                     "has_reply_context": reply_context is not None,
-                    "has_reply_timestamp": reply_timestamp is not None
+                    "has_reply_timestamp": reply_timestamp is not None,
+                    "has_image": image_description is not None
                 }
             )
             
@@ -429,3 +443,78 @@ class OpenAIClient:
         except Exception as e:
             logger.error("Unexpected error while answering simple question", exc_info=True)
             raise OpenAIClientError(f"Ошибка: {str(e)}") from e
+
+    async def describe_image(self, image_data: bytes) -> str:
+        """
+        Describe image content using vision model.
+        
+        Args:
+            image_data: Raw image bytes
+            
+        Returns:
+            Text description of the image
+            
+        Raises:
+            OpenAIClientError: If API call fails or vision is disabled
+        """
+        if not self.vision_enabled:
+            raise OpenAIClientError("Распознавание изображений отключено.")
+        
+        try:
+            b64_image = base64.b64encode(image_data).decode("utf-8")
+            
+            logger.info(
+                "Sending image to vision model",
+                extra={
+                    "vision_model": self.vision_model,
+                    "image_size_bytes": len(image_data)
+                }
+            )
+            
+            response = await self.client.chat.completions.create(
+                model=self.vision_model,
+                messages=[
+                    {"role": "system", "content": IMAGE_DESCRIPTION_SYSTEM_PROMPT},
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/jpeg;base64,{b64_image}"
+                                }
+                            }
+                        ]
+                    }
+                ],
+                max_tokens=self.vision_max_tokens,
+                temperature=0.3
+            )
+            
+            description = response.choices[0].message.content
+            
+            logger.info(
+                "Image described successfully",
+                extra={
+                    "tokens_used": response.usage.total_tokens,
+                    "description_length": len(description) if description else 0
+                }
+            )
+            
+            return description or "Не удалось описать изображение."
+            
+        except RateLimitError as e:
+            logger.error("Vision API rate limit exceeded", exc_info=True)
+            raise OpenAIClientError("Превышен лимит запросов к API. Попробуй позже.") from e
+            
+        except APIConnectionError as e:
+            logger.error("Vision API connection error", exc_info=True)
+            raise OpenAIClientError("Не удалось подключиться к API.") from e
+            
+        except OpenAIAPIError as e:
+            logger.error("Vision API error", exc_info=True)
+            raise OpenAIClientError(f"Ошибка API: {str(e)}") from e
+            
+        except Exception as e:
+            logger.error("Unexpected error describing image", exc_info=True)
+            raise OpenAIClientError(f"Ошибка при распознавании изображения: {str(e)}") from e

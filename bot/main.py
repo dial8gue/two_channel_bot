@@ -116,7 +116,10 @@ async def main() -> None:
             classifier_model=config.classifier_model,
             max_tokens=config.max_tokens,
             inline_max_tokens=config.inline_max_tokens,
-            timezone=config.timezone
+            timezone=config.timezone,
+            vision_model=config.vision_model,
+            vision_enabled=config.vision_enabled,
+            vision_max_tokens=config.vision_max_tokens
         )
         
         # Check if there's a saved model in database and apply it
@@ -124,6 +127,12 @@ async def main() -> None:
         if saved_model:
             openai_client.set_model(saved_model)
             logger.info(f"Loaded saved OpenAI model from database: {saved_model}")
+        
+        # Check if there's a saved vision setting in database and apply it
+        saved_vision = await config_repository.get("vision_enabled")
+        if saved_vision is not None:
+            openai_client.vision_enabled = saved_vision.lower() == "true"
+            logger.info(f"Loaded saved vision setting from database: {openai_client.vision_enabled}")
         
         # Create service instances
         logger.info("Creating service instances...")
