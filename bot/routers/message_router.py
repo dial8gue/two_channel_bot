@@ -46,10 +46,13 @@ async def handle_group_message(message: Message, message_service: MessageService
             emoji = message.sticker.emoji or "стикер"
             text = f"[стикер: {emoji}]"
         
-        # Skip messages without text and without sticker
+        if not text and message.animation:
+            text = "[GIF]"
+        
+        # Skip messages without text, sticker, or animation
         if not text:
             logger.debug(
-                "Skipping message without text or sticker",
+                "Skipping message without text, sticker, or animation",
                 extra={
                     "message_id": message.message_id,
                     "chat_id": message.chat.id

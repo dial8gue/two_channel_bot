@@ -67,21 +67,26 @@ async def _extract_image_description(message: Message, openai_client: OpenAIClie
     Returns:
         Image description string or None if no image found
     """
-    # Determine which message has the photo or sticker
+    # Determine which message has the photo, sticker, or animation
     photo_message = None
     sticker_message = None
+    animation_message = None
     
     if message.photo:
         photo_message = message
     elif message.sticker:
         sticker_message = message
+    elif message.animation:
+        animation_message = message
     elif message.reply_to_message:
         if message.reply_to_message.photo:
             photo_message = message.reply_to_message
         elif message.reply_to_message.sticker:
             sticker_message = message.reply_to_message
+        elif message.reply_to_message.animation:
+            animation_message = message.reply_to_message
     
-    if not photo_message and not sticker_message:
+    if not photo_message and not sticker_message and not animation_message:
         return None
     
     try:
@@ -123,6 +128,23 @@ async def _extract_image_description(message: Message, openai_client: OpenAIClie
             
             buf = BytesIO()
             await message.bot.download(sticker.thumbnail, destination=buf)
+            image_data = buf.getvalue()
+        elif animation_message:
+            # Animation (GIF) — use thumbnail
+            animation = animation_message.animation
+            if not animation.thumbnail:
+                return "[GIF]"
+            
+            logger.info(
+                "Downloading animation thumbnail for vision",
+                extra={
+                    "file_id": animation.thumbnail.file_id,
+                    "file_name": animation.file_name
+                }
+            )
+            
+            buf = BytesIO()
+            await message.bot.download(animation.thumbnail, destination=buf)
             image_data = buf.getvalue()
         
         # Send to vision model for description
@@ -308,8 +330,8 @@ def create_ask_router(config: Config) -> Router:
             # Remove /ask command from beginning
             question = command_text.split(maxsplit=1)[1] if len(command_text.split()) > 1 else ""
             
-            # If no question text but there's a photo or sticker, use default prompt
-            if not question.strip() and (message.photo or message.sticker):
+            # If no question text but there's a photo, sticker, or GIF, use default prompt
+            if not question.strip() and (message.photo or message.sticker or message.animation):
                 question = "Что на этом изображении?"
             
             if not question.strip():
@@ -349,7 +371,7 @@ def create_ask_router(config: Config) -> Router:
     @router.message(
         F.reply_to_message,
         lambda message: message.chat.type in [ChatType.GROUP, ChatType.SUPERGROUP],
-        lambda message: message.text or (message.photo and message.caption) or message.sticker
+        lambda message: message.text or (message.photo and message.caption) or message.sticker or message.animation
     )
     async def handle_reply_to_bot(
         message: Message,
@@ -396,8 +418,8 @@ def create_ask_router(config: Config) -> Router:
             
             question = text.strip()
             
-            # If photo or sticker without text, use default question
-            if not question and (message.photo or message.sticker):
+            # If photo, sticker, or GIF without text, use default question
+            if not question and (message.photo or message.sticker or message.animation):
                 question = "Что на этом изображении?"
             
             if not question:
@@ -433,7 +455,7 @@ def create_ask_router(config: Config) -> Router:
     
     @router.message(
         lambda message: message.chat.type in [ChatType.GROUP, ChatType.SUPERGROUP],
-        lambda message: message.text or (message.photo and message.caption) or message.sticker
+        lambda message: message.text or (message.photo and message.caption) or message.sticker or message.animation
     )
     async def handle_mention(
         message: Message,
@@ -476,7 +498,7 @@ def create_ask_router(config: Config) -> Router:
                 # Not our message - skip to other handlers
                 raise SkipHandler()
             
-            if not question and (message.photo or message.sticker):
+            if not question and (message.photo or message.sticker or message.animation):
                 question = "Что на этом изображении?"
             
             if not question:
