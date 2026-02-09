@@ -43,12 +43,8 @@ async def handle_group_message(message: Message, message_service: MessageService
         
         if not text and message.sticker:
             # Build sticker description for analysis
-            emoji = message.sticker.emoji or ""
-            set_name = message.sticker.set_name or ""
-            if set_name:
-                text = f"[стикер: {emoji} из набора \"{set_name}\"]"
-            else:
-                text = f"[стикер: {emoji}]"
+            emoji = message.sticker.emoji or "стикер"
+            text = f"[стикер: {emoji}]"
         
         # Skip messages without text and without sticker
         if not text:

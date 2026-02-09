@@ -110,8 +110,7 @@ async def _extract_image_description(message: Message, openai_client: OpenAIClie
             if not sticker.thumbnail:
                 # No thumbnail available, return emoji fallback
                 emoji = sticker.emoji or ""
-                set_name = sticker.set_name or ""
-                return f"Стикер {emoji} из набора \"{set_name}\"" if set_name else f"Стикер {emoji}"
+                return f"Стикер {emoji}"
             
             logger.info(
                 "Downloading sticker thumbnail for vision",
