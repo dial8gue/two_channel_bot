@@ -109,7 +109,7 @@ async def _extract_image_description(message: Message, openai_client: OpenAIClie
             buf = BytesIO()
             await message.bot.download(photo, destination=buf)
             image_data = buf.getvalue()
-        else:
+        elif sticker_message:
             # Sticker — use thumbnail
             sticker = sticker_message.sticker
             if not sticker.thumbnail:
