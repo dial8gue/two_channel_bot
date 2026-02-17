@@ -56,136 +56,63 @@ def _check_bot_mention(text: str, bot_username: str) -> tuple[bool, str]:
 async def _extract_image_description(message: Message, openai_client: OpenAIClient) -> str | None:
     """
     Extract and describe image from message or its reply.
-    
-    Checks for photo/sticker in the message itself first, then in the replied message.
-    Downloads the largest available photo (or sticker thumbnail) and sends it to the vision model.
-    
+
+    Checks for photo in the message itself first, then in the replied message.
+    Downloads the largest available photo and sends it to the vision model.
+
     Args:
-        message: Telegram message (may contain photo, sticker, or reply to photo/sticker)
+        message: Telegram message (may contain photo or reply to photo)
         openai_client: OpenAI client with vision support
-        
+
     Returns:
         Image description string or None if no image found
     """
-    # Determine which message has the photo, sticker, animation, or video
+    # Determine which message has the photo
     photo_message = None
-    sticker_message = None
-    animation_message = None
-    video_message = None
-    
+
     if message.photo:
         photo_message = message
-    elif message.sticker:
-        sticker_message = message
-    elif message.animation:
-        animation_message = message
-    elif message.video:
-        video_message = message
-    elif message.reply_to_message:
-        if message.reply_to_message.photo:
-            photo_message = message.reply_to_message
-        elif message.reply_to_message.sticker:
-            sticker_message = message.reply_to_message
-        elif message.reply_to_message.animation:
-            animation_message = message.reply_to_message
-        elif message.reply_to_message.video:
-            video_message = message.reply_to_message
-    
-    if not photo_message and not sticker_message and not animation_message and not video_message:
+    elif message.reply_to_message and message.reply_to_message.photo:
+        photo_message = message.reply_to_message
+
+    if not photo_message:
         return None
-    
+
     try:
         from io import BytesIO
-        
-        if photo_message:
-            # Get the largest photo (last in the list)
-            photo = photo_message.photo[-1]
-            
-            logger.info(
-                "Downloading image for vision",
-                extra={
-                    "file_id": photo.file_id,
-                    "width": photo.width,
-                    "height": photo.height,
-                    "file_size": photo.file_size
-                }
-            )
-            
-            buf = BytesIO()
-            await message.bot.download(photo, destination=buf)
-            image_data = buf.getvalue()
-        elif sticker_message:
-            # Sticker — use thumbnail
-            sticker = sticker_message.sticker
-            if not sticker.thumbnail:
-                # No thumbnail available, return emoji fallback
-                emoji = sticker.emoji or ""
-                return f"Стикер {emoji}"
-            
-            logger.info(
-                "Downloading sticker thumbnail for vision",
-                extra={
-                    "file_id": sticker.thumbnail.file_id,
-                    "sticker_emoji": sticker.emoji,
-                    "sticker_set": sticker.set_name
-                }
-            )
-            
-            buf = BytesIO()
-            await message.bot.download(sticker.thumbnail, destination=buf)
-            image_data = buf.getvalue()
-        elif animation_message:
-            # Animation (GIF) — use thumbnail
-            animation = animation_message.animation
-            if not animation.thumbnail:
-                return "[GIF]"
-            
-            logger.info(
-                "Downloading animation thumbnail for vision",
-                extra={
-                    "file_id": animation.thumbnail.file_id,
-                    "file_name": animation.file_name
-                }
-            )
-            
-            buf = BytesIO()
-            await message.bot.download(animation.thumbnail, destination=buf)
-            image_data = buf.getvalue()
-        elif video_message:
-            # Video — use thumbnail
-            video = video_message.video
-            if not video.thumbnail:
-                return "[Видео]"
-            
-            logger.info(
-                "Downloading video thumbnail for vision",
-                extra={
-                    "file_id": video.thumbnail.file_id,
-                    "file_name": video.file_name,
-                    "duration": video.duration
-                }
-            )
-            
-            buf = BytesIO()
-            await message.bot.download(video.thumbnail, destination=buf)
-            image_data = buf.getvalue()
-        
-        # Send to vision model for description
+
+        photo = photo_message.photo[-1]
+
+        logger.info(
+            "Downloading image for vision",
+            extra={
+                "file_id": photo.file_id,
+                "width": photo.width,
+                "height": photo.height,
+                "file_size": photo.file_size
+            }
+        )
+
+        buf = BytesIO()
+        await message.bot.download(photo, destination=buf)
+        image_data = buf.getvalue()
+
         description = await openai_client.describe_image(image_data)
-        
+
         logger.info(
             "Image described successfully",
             extra={"description_length": len(description)}
         )
-        
+
         return description
-        
+
     except OpenAIClientError as e:
         logger.warning(f"Failed to describe image: {e}")
         return None
     except Exception as e:
         logger.error(f"Error extracting image: {e}", exc_info=True)
         return None
+
 
 
 async def _handle_question(
