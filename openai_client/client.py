@@ -9,6 +9,7 @@ from openai import AsyncOpenAI, RateLimitError, APIConnectionError
 from openai import APIError as OpenAIAPIError
 from database.models import MessageModel
 from utils.timezone_helper import format_datetime
+from utils.message_formatter import MessageFormatter
 from .prompts import (
     ANALYSIS_SYSTEM_PROMPT,
     QUESTION_CLASSIFIER_SYSTEM_PROMPT,
@@ -144,6 +145,10 @@ class OpenAIClient:
             )
             
             analysis = response.choices[0].message.content
+            
+            # Post-process: escape underscores in @username mentions
+            if analysis:
+                analysis = MessageFormatter.escape_usernames_markdown(analysis)
             
             logger.info(
                 "Analysis completed successfully",
@@ -310,6 +315,10 @@ class OpenAIClient:
             )
             
             answer = response.choices[0].message.content
+            
+            # Post-process: escape underscores in @username mentions
+            if answer:
+                answer = MessageFormatter.escape_usernames_markdown(answer)
             
             logger.info(
                 "Question answer received",

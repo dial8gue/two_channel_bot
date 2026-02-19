@@ -34,6 +34,34 @@ class MessageFormatter:
     """Formats messages for Telegram with Markdown support."""
     
     @staticmethod
+    def escape_usernames_markdown(text: str) -> str:
+        """
+        Escape underscores in @username mentions for Telegram Markdown.
+        
+        Finds all @username patterns and replaces underscores with \\_
+        so Telegram doesn't interpret them as italic formatting.
+        Also removes duplicate escaping if LLM already escaped some.
+        
+        Args:
+            text: Text potentially containing @username mentions
+            
+        Returns:
+            Text with escaped underscores in usernames
+        """
+        if not text:
+            return text
+        
+        def _escape_match(match: re.Match) -> str:
+            username = match.group(0)
+            # First undo any existing escaping to avoid double-escaping
+            username = username.replace('\\_', '_')
+            # Then escape all underscores
+            return username.replace('_', '\\_')
+        
+        # Match @username (may already contain \\_ escaping from LLM)
+        return re.sub(r'@[A-Za-z0-9_\\]+\b', _escape_match, text)
+    
+    @staticmethod
     def escape_markdown_v1(text: str) -> str:
         """
         Escape special characters for Telegram Markdown (legacy).
@@ -90,6 +118,7 @@ class MessageFormatter:
         
         Escapes: < > &
         Converts markdown-style formatting to HTML tags if present.
+        Preserves @username mentions (underscores are not treated as formatting).
         
         Args:
             text: Raw text to convert
@@ -105,6 +134,16 @@ class MessageFormatter:
         html_text = html_text.replace('<', '&lt;')
         html_text = html_text.replace('>', '&gt;')
         
+        # Remove backslash escaping from usernames (LLM may have added \_)
+        html_text = re.sub(r'(@[A-Za-z0-9_\\]+)\b', lambda m: m.group(0).replace('\\_', '_'), html_text)
+        
+        # Protect @username mentions by replacing with placeholders
+        usernames = []
+        def _protect_username(match: re.Match) -> str:
+            usernames.append(match.group(0))
+            return f'\x00USERNAME{len(usernames) - 1}\x00'
+        html_text = re.sub(r'@[A-Za-z0-9_]+\b', _protect_username, html_text)
+        
         # Convert markdown-style formatting to HTML tags
         # Bold: **text** or __text__ -> <b>text</b>
         html_text = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', html_text)
@@ -117,12 +156,17 @@ class MessageFormatter:
         # Code: `text` -> <code>text</code>
         html_text = re.sub(r'`(.+?)`', r'<code>\1</code>', html_text)
         
+        # Restore @username mentions
+        for i, username in enumerate(usernames):
+            html_text = html_text.replace(f'\x00USERNAME{i}\x00', username)
+        
         return html_text
     
     @staticmethod
     def strip_formatting(text: str) -> str:
         """
         Remove all formatting for plain text fallback.
+        Preserves @username mentions intact.
         
         Args:
             text: Text with potential formatting
@@ -133,9 +177,18 @@ class MessageFormatter:
         if not text:
             return text
         
+        # Protect @username mentions (with possible \\_ escaping)
+        usernames = []
+        def _protect_username(match: re.Match) -> str:
+            # Remove backslash escaping for plain text
+            clean = match.group(0).replace('\\_', '_')
+            usernames.append(clean)
+            return f'\x00USERNAME{len(usernames) - 1}\x00'
+        plain_text = re.sub(r'@[A-Za-z0-9_\\]+\b', _protect_username, text)
+        
         # Remove markdown formatting characters
         # Bold: **text** or __text__ -> text
-        plain_text = re.sub(r'\*\*(.+?)\*\*', r'\1', text)
+        plain_text = re.sub(r'\*\*(.+?)\*\*', r'\1', plain_text)
         plain_text = re.sub(r'__(.+?)__', r'\1', plain_text)
         
         # Italic: *text* or _text_ -> text
@@ -150,6 +203,10 @@ class MessageFormatter:
         
         # Remove any remaining special characters that might cause issues
         plain_text = plain_text.replace('\\', '')
+        
+        # Restore @username mentions
+        for i, username in enumerate(usernames):
+            plain_text = plain_text.replace(f'\x00USERNAME{i}\x00', username)
         
         return plain_text
     
@@ -455,3 +512,4 @@ class MessageFormatter:
             f"⏳ *Погоди*\n"
             f"Ты недавно {operation}. Попробуй через {time_str}."
         )
+
