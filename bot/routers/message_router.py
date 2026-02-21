@@ -105,12 +105,29 @@ async def handle_group_message(message: Message, message_service: MessageService
         admin_service: Service for admin operations
     """
     try:
-        # Register group if not already registered
+        # Register/update group (skip if group was recently removed)
         try:
-            await admin_service.add_or_update_group(
-                chat_id=message.chat.id,
-                title=message.chat.title or f"Group {message.chat.id}"
-            )
+            group = await admin_service.group_repository.get(message.chat.id)
+            if group is None:
+                # New group — verify bot is still a member before registering
+                try:
+                    member = await message.bot.get_chat_member(
+                        message.chat.id, message.bot.id
+                    )
+                    if member.status in ("left", "kicked"):
+                        logger.debug(f"Bot is no longer in group {message.chat.id}, skipping registration")
+                    else:
+                        await admin_service.add_or_update_group(
+                            chat_id=message.chat.id,
+                            title=message.chat.title or f"Group {message.chat.id}"
+                        )
+                except Exception:
+                    pass
+            elif group.title != (message.chat.title or f"Group {message.chat.id}"):
+                await admin_service.add_or_update_group(
+                    chat_id=message.chat.id,
+                    title=message.chat.title or f"Group {message.chat.id}"
+                )
         except Exception as e:
             logger.error(f"Failed to register group: {e}", exc_info=True)
         
