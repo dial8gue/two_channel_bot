@@ -791,7 +791,7 @@ def create_admin_router(config: Config) -> Router:
                 try:
                     # Send goodbye message to the group before leaving
                     try:
-                        await callback.bot.send_message(chat_id, "Я ливаю отсюда!")
+                        await callback.bot.send_message(chat_id, "Я ливаю отсюда! Вопросы к моему разработчику.")
                         # Give some time for the message to be delivered
                         await asyncio.sleep(1)
                     except Exception as e:

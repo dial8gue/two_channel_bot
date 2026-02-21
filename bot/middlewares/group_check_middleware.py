@@ -69,7 +69,7 @@ class GroupCheckMiddleware(BaseMiddleware):
                 )
                 
                 try:
-                    await event.answer("Я отключен разработчиком в этой конфе.")
+                    await event.answer("Я отключен моим разработчиком в этой конфе.")
                 except Exception as e:
                     logger.error(f"Failed to send disabled notification: {e}")
             else:
