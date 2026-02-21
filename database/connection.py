@@ -93,6 +93,16 @@ class DatabaseConnection:
                 )
             """)
             
+            # Create groups table
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS groups (
+                    chat_id INTEGER PRIMARY KEY,
+                    title TEXT NOT NULL,
+                    is_enabled INTEGER NOT NULL DEFAULT 1,
+                    added_at DATETIME NOT NULL
+                )
+            """)
+            
             await conn.commit()
             logger.info(f"Database initialized successfully at {self.db_path}")
             

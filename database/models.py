@@ -93,3 +93,21 @@ class DebounceModel:
             'operation': self.operation,
             'last_execution': self.last_execution.isoformat()
         }
+
+
+@dataclass
+class GroupModel:
+    """Model for storing group information and settings."""
+    chat_id: int
+    title: str
+    is_enabled: bool = True
+    added_at: Optional[datetime] = None
+    
+    def to_dict(self) -> dict:
+        """Convert model to dictionary."""
+        return {
+            'chat_id': self.chat_id,
+            'title': self.title,
+            'is_enabled': self.is_enabled,
+            'added_at': self.added_at.isoformat() if self.added_at else None
+        }

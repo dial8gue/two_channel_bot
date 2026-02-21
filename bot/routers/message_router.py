@@ -4,12 +4,13 @@ import logging
 from datetime import datetime
 
 from aiogram import Router
-from aiogram.types import Message
-from aiogram.filters import ChatMemberUpdatedFilter
+from aiogram.types import Message, ChatMemberUpdated
+from aiogram.filters import ChatMemberUpdatedFilter, JOIN_TRANSITION
 from aiogram.enums import ChatType
 from aiogram.dispatcher.event.bases import SkipHandler
 
 from services.message_service import MessageService
+from services.admin_service import AdminService
 
 
 logger = logging.getLogger(__name__)
@@ -18,26 +19,72 @@ logger = logging.getLogger(__name__)
 router = Router(name="message_router")
 
 
+@router.my_chat_member(ChatMemberUpdatedFilter(member_status_changed=JOIN_TRANSITION))
+async def on_bot_added_to_group(event: ChatMemberUpdated, admin_service: AdminService):
+    """
+    Handle bot being added to a group.
+    
+    Registers the group in the database.
+    
+    Args:
+        event: Chat member update event
+        admin_service: Service for admin operations
+    """
+    try:
+        chat = event.chat
+        
+        # Only handle group chats
+        if chat.type not in [ChatType.GROUP, ChatType.SUPERGROUP]:
+            return
+        
+        logger.info(
+            f"Bot added to group: {chat.title} (ID: {chat.id})",
+            extra={"chat_id": chat.id, "chat_title": chat.title}
+        )
+        
+        # Register group in database
+        await admin_service.add_or_update_group(
+            chat_id=chat.id,
+            title=chat.title or f"Group {chat.id}"
+        )
+        
+        logger.info(f"Group {chat.id} registered in database")
+        
+    except Exception as e:
+        logger.error(f"Error handling bot added to group: {e}", exc_info=True)
+
+
 @router.message(
     lambda message: message.chat.type in [ChatType.GROUP, ChatType.SUPERGROUP],
     lambda message: not message.text or not message.text.startswith('/'),
     lambda message: message.from_user and not message.from_user.is_bot
 )
-async def handle_group_message(message: Message, message_service: MessageService):
+async def handle_group_message(message: Message, message_service: MessageService, admin_service: AdminService):
     """
     Handle incoming messages from group chats.
     
     This handler:
     1. Filters messages from group and supergroup chats
-    2. Extracts message data (text or sticker info)
-    3. Saves message to database via MessageService
-    4. Triggers cleanup of old messages
+    2. Registers group if not already registered
+    3. Extracts message data (text or sticker info)
+    4. Saves message to database via MessageService
+    5. Triggers cleanup of old messages
     
     Args:
         message: Incoming message from Telegram
         message_service: Service for message operations
+        admin_service: Service for admin operations
     """
     try:
+        # Register group if not already registered
+        try:
+            await admin_service.add_or_update_group(
+                chat_id=message.chat.id,
+                title=message.chat.title or f"Group {message.chat.id}"
+            )
+        except Exception as e:
+            logger.error(f"Failed to register group: {e}", exc_info=True)
+        
         # Extract text content or sticker description
         text = message.text
         

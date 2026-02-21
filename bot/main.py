@@ -18,7 +18,8 @@ from database.repository import (
     MessageRepository,
     ConfigRepository,
     CacheRepository,
-    DebounceRepository
+    DebounceRepository,
+    GroupRepository
 )
 from services.message_service import MessageService
 from services.analysis_service import AnalysisService
@@ -32,6 +33,7 @@ from bot.routers.admin_router import create_admin_router
 from bot.routers.user_router import create_user_router
 from bot.routers.ask_router import create_ask_router
 from bot.middlewares.collection_middleware import CollectionMiddleware
+from bot.middlewares.group_check_middleware import GroupCheckMiddleware
 
 
 # Configure logging
@@ -101,6 +103,7 @@ async def main() -> None:
         config_repository = ConfigRepository(db_connection)
         cache_repository = CacheRepository(db_connection)
         debounce_repository = DebounceRepository(db_connection)
+        group_repository = GroupRepository(db_connection)
         
         # Create utility instances
         logger.info("Creating utility instances...")
@@ -157,6 +160,7 @@ async def main() -> None:
             message_repository=message_repository,
             config_repository=config_repository,
             cache_repository=cache_repository,
+            group_repository=group_repository,
             timezone=config.timezone
         )
         
@@ -173,6 +177,10 @@ async def main() -> None:
         logger.info("Registering middleware...")
         collection_middleware = CollectionMiddleware(config)
         message_router.message.middleware(collection_middleware)
+        
+        # Register group check middleware (checks if bot is enabled in group)
+        group_check_middleware = GroupCheckMiddleware()
+        message_router.message.middleware(group_check_middleware)
         
         # Register routers
         logger.info("Registering routers...")

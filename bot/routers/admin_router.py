@@ -658,4 +658,220 @@ def create_admin_router(config: Config) -> Router:
             await message.answer("❌ Ошибка при переключении распознавания изображений.")
     
     
+    @router.message(Command("manage_groups"), admin_filter)
+    async def cmd_manage_groups(message: Message, admin_service: AdminService):
+        """
+        Handle /manage_groups command to show group management interface.
+        
+        Args:
+            message: Command message from admin
+            admin_service: Service for admin operations
+        """
+        try:
+            logger.info(
+                "Manage groups command received",
+                extra={"admin_id": message.from_user.id}
+            )
+            
+            # Get all groups
+            groups = await admin_service.get_all_groups()
+            
+            if not groups:
+                await message.answer("📋 Нет зарегистрированных групп.")
+                return
+            
+            # Create inline keyboard with group options
+            keyboard_buttons = []
+            
+            for group in groups:
+                # Status emoji
+                status_emoji = "✅" if group.is_enabled else "⛔️"
+                
+                # Group title button (just for display)
+                keyboard_buttons.append([
+                    InlineKeyboardButton(
+                        text=f"{status_emoji} {group.title}",
+                        callback_data=f"group_info:{group.chat_id}"
+                    )
+                ])
+                
+                # Action buttons for this group
+                action_buttons = []
+                
+                if group.is_enabled:
+                    action_buttons.append(
+                        InlineKeyboardButton(
+                            text="🔴 Отключить",
+                            callback_data=f"group_disable:{group.chat_id}"
+                        )
+                    )
+                else:
+                    action_buttons.append(
+                        InlineKeyboardButton(
+                            text="🟢 Включить",
+                            callback_data=f"group_enable:{group.chat_id}"
+                        )
+                    )
+                
+                action_buttons.append(
+                    InlineKeyboardButton(
+                        text="🚪 Покинуть",
+                        callback_data=f"group_leave:{group.chat_id}"
+                    )
+                )
+                
+                keyboard_buttons.append(action_buttons)
+            
+            keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)
+            
+            await message.answer(
+                "🔧 Управление группами:\n\n"
+                "Выбери действие для группы:",
+                reply_markup=keyboard
+            )
+            
+        except Exception as e:
+            logger.error(
+                f"Error in manage_groups command: {e}",
+                extra={"admin_id": message.from_user.id if message.from_user else None},
+                exc_info=True
+            )
+            await message.answer("❌ Ошибка при получении списка групп.")
+    
+    
+    @router.callback_query(lambda c: c.data and c.data.startswith("group_"))
+    async def callback_group_action(
+        callback: CallbackQuery,
+        admin_service: AdminService
+    ):
+        """
+        Handle callback from group management buttons.
+        
+        Callback data formats:
+        - group_info:<chat_id> - Show group info
+        - group_disable:<chat_id> - Disable bot in group
+        - group_enable:<chat_id> - Enable bot in group
+        - group_leave:<chat_id> - Leave group
+        
+        Args:
+            callback: Callback query from inline button
+            admin_service: Service for admin operations
+        """
+        try:
+            action, chat_id_str = callback.data.split(":", 1)
+            chat_id = int(chat_id_str)
+            
+            if action == "group_info":
+                # Just acknowledge, no action needed
+                await callback.answer()
+                return
+            
+            elif action == "group_disable":
+                # Disable bot in group
+                await admin_service.toggle_group(chat_id, enabled=False)
+                await callback.answer("✅ Бот отключен в группе", show_alert=True)
+                
+                logger.info(
+                    f"Bot disabled in group {chat_id}",
+                    extra={"admin_id": callback.from_user.id}
+                )
+                
+            elif action == "group_enable":
+                # Enable bot in group
+                await admin_service.toggle_group(chat_id, enabled=True)
+                await callback.answer("✅ Бот включен в группе", show_alert=True)
+                
+                logger.info(
+                    f"Bot enabled in group {chat_id}",
+                    extra={"admin_id": callback.from_user.id}
+                )
+                
+            elif action == "group_leave":
+                # Leave group
+                try:
+                    # Send goodbye message to the group before leaving
+                    try:
+                        await callback.bot.send_message(chat_id, "Я ливаю отсюда!")
+                        # Give some time for the message to be delivered
+                        await asyncio.sleep(1)
+                    except Exception as e:
+                        logger.warning(f"Failed to send goodbye message to group {chat_id}: {e}")
+                    
+                    # Now leave the group
+                    await callback.bot.leave_chat(chat_id)
+                    await admin_service.remove_group(chat_id)
+                    await callback.answer("✅ Бот покинул группу", show_alert=True)
+                    
+                    logger.info(
+                        f"Bot left group {chat_id}",
+                        extra={"admin_id": callback.from_user.id}
+                    )
+                    
+                except Exception as e:
+                    logger.error(f"Failed to leave group {chat_id}: {e}", exc_info=True)
+                    await callback.answer("❌ Не удалось покинуть группу", show_alert=True)
+                    return
+            
+            # Refresh the group list
+            groups = await admin_service.get_all_groups()
+            
+            if not groups:
+                await callback.message.edit_text("📋 Нет зарегистрированных групп.")
+                return
+            
+            # Recreate keyboard
+            keyboard_buttons = []
+            
+            for group in groups:
+                status_emoji = "✅" if group.is_enabled else "⛔️"
+                
+                keyboard_buttons.append([
+                    InlineKeyboardButton(
+                        text=f"{status_emoji} {group.title}",
+                        callback_data=f"group_info:{group.chat_id}"
+                    )
+                ])
+                
+                action_buttons = []
+                
+                if group.is_enabled:
+                    action_buttons.append(
+                        InlineKeyboardButton(
+                            text="🔴 Отключить",
+                            callback_data=f"group_disable:{group.chat_id}"
+                        )
+                    )
+                else:
+                    action_buttons.append(
+                        InlineKeyboardButton(
+                            text="🟢 Включить",
+                            callback_data=f"group_enable:{group.chat_id}"
+                        )
+                    )
+                
+                action_buttons.append(
+                    InlineKeyboardButton(
+                        text="🚪 Покинуть",
+                        callback_data=f"group_leave:{group.chat_id}"
+                    )
+                )
+                
+                keyboard_buttons.append(action_buttons)
+            
+            keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)
+            
+            await callback.message.edit_reply_markup(reply_markup=keyboard)
+            
+        except Exception as e:
+            logger.error(
+                f"Error in group action callback: {e}",
+                extra={"admin_id": callback.from_user.id if callback.from_user else None},
+                exc_info=True
+            )
+            try:
+                await callback.answer("❌ Произошла ошибка", show_alert=True)
+            except Exception:
+                pass
+    
+    
     return router

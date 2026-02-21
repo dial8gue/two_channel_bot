@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import List, Optional
 
 from database.connection import DatabaseConnection
-from database.models import MessageModel, ConfigModel, CacheModel, DebounceModel
+from database.models import MessageModel, ConfigModel, CacheModel, DebounceModel, GroupModel
 
 
 logger = logging.getLogger(__name__)
@@ -707,3 +707,182 @@ class DebounceRepository:
             logger.error(f"Failed to update execution: {e}", exc_info=True)
             await conn.rollback()
             raise
+
+
+
+class GroupRepository:
+    """Repository for group-related database operations."""
+    
+    def __init__(self, db_connection: DatabaseConnection):
+        """
+        Initialize group repository.
+        
+        Args:
+            db_connection: Database connection manager
+        """
+        self.db_connection = db_connection
+    
+    async def add_or_update(self, group: GroupModel) -> None:
+        """
+        Add or update group information.
+        
+        Args:
+            group: Group model to add or update
+        """
+        conn = await self.db_connection.get_connection()
+        
+        try:
+            added_at = group.added_at or datetime.now()
+            
+            await conn.execute(
+                """
+                INSERT INTO groups (chat_id, title, is_enabled, added_at)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(chat_id) DO UPDATE SET
+                    title = excluded.title,
+                    is_enabled = excluded.is_enabled
+                """,
+                (group.chat_id, group.title, 1 if group.is_enabled else 0, added_at)
+            )
+            await conn.commit()
+            logger.debug(f"Group {group.chat_id} added/updated")
+            
+        except Exception as e:
+            logger.error(f"Failed to add/update group: {e}", exc_info=True)
+            await conn.rollback()
+            raise
+    
+    async def get(self, chat_id: int) -> Optional[GroupModel]:
+        """
+        Get group by chat ID.
+        
+        Args:
+            chat_id: Telegram chat ID
+            
+        Returns:
+            Group model or None if not found
+        """
+        conn = await self.db_connection.get_connection()
+        
+        try:
+            cursor = await conn.execute(
+                "SELECT chat_id, title, is_enabled, added_at FROM groups WHERE chat_id = ?",
+                (chat_id,)
+            )
+            row = await cursor.fetchone()
+            
+            if row:
+                return GroupModel(
+                    chat_id=row['chat_id'],
+                    title=row['title'],
+                    is_enabled=bool(row['is_enabled']),
+                    added_at=datetime.fromisoformat(row['added_at']) if row['added_at'] else None
+                )
+            return None
+            
+        except Exception as e:
+            logger.error(f"Failed to get group: {e}", exc_info=True)
+            return None
+    
+    async def get_all(self) -> List[GroupModel]:
+        """
+        Get all groups.
+        
+        Returns:
+            List of all group models
+        """
+        conn = await self.db_connection.get_connection()
+        
+        try:
+            cursor = await conn.execute(
+                "SELECT chat_id, title, is_enabled, added_at FROM groups ORDER BY title"
+            )
+            rows = await cursor.fetchall()
+            
+            groups = []
+            for row in rows:
+                group = GroupModel(
+                    chat_id=row['chat_id'],
+                    title=row['title'],
+                    is_enabled=bool(row['is_enabled']),
+                    added_at=datetime.fromisoformat(row['added_at']) if row['added_at'] else None
+                )
+                groups.append(group)
+            
+            logger.debug(f"Retrieved {len(groups)} groups")
+            return groups
+            
+        except Exception as e:
+            logger.error(f"Failed to get all groups: {e}", exc_info=True)
+            return []
+    
+    async def set_enabled(self, chat_id: int, enabled: bool) -> None:
+        """
+        Enable or disable a group.
+        
+        Args:
+            chat_id: Telegram chat ID
+            enabled: True to enable, False to disable
+        """
+        conn = await self.db_connection.get_connection()
+        
+        try:
+            await conn.execute(
+                "UPDATE groups SET is_enabled = ? WHERE chat_id = ?",
+                (1 if enabled else 0, chat_id)
+            )
+            await conn.commit()
+            logger.debug(f"Group {chat_id} enabled status set to {enabled}")
+            
+        except Exception as e:
+            logger.error(f"Failed to set group enabled status: {e}", exc_info=True)
+            await conn.rollback()
+            raise
+    
+    async def delete(self, chat_id: int) -> None:
+        """
+        Delete group from database.
+        
+        Args:
+            chat_id: Telegram chat ID
+        """
+        conn = await self.db_connection.get_connection()
+        
+        try:
+            await conn.execute("DELETE FROM groups WHERE chat_id = ?", (chat_id,))
+            await conn.commit()
+            logger.debug(f"Group {chat_id} deleted")
+            
+        except Exception as e:
+            logger.error(f"Failed to delete group: {e}", exc_info=True)
+            await conn.rollback()
+            raise
+    
+    async def is_enabled(self, chat_id: int) -> bool:
+        """
+        Check if group is enabled.
+        
+        Args:
+            chat_id: Telegram chat ID
+            
+        Returns:
+            True if enabled or not found (default), False if disabled
+        """
+        conn = await self.db_connection.get_connection()
+        
+        try:
+            cursor = await conn.execute(
+                "SELECT is_enabled FROM groups WHERE chat_id = ?",
+                (chat_id,)
+            )
+            row = await cursor.fetchone()
+            
+            if row:
+                return bool(row['is_enabled'])
+            # Default to enabled if group not in database
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to check if group is enabled: {e}", exc_info=True)
+            # Default to enabled on error
+            return True

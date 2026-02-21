@@ -5,7 +5,7 @@ import logging
 from datetime import datetime
 from typing import Dict, Any, Optional
 
-from database.repository import MessageRepository, ConfigRepository, CacheRepository
+from database.repository import MessageRepository, ConfigRepository, CacheRepository, GroupRepository
 
 
 logger = logging.getLogger(__name__)
@@ -26,6 +26,7 @@ class AdminService:
         message_repository: MessageRepository,
         config_repository: ConfigRepository,
         cache_repository: CacheRepository,
+        group_repository: GroupRepository,
         timezone: Optional[str] = None
     ):
         """
@@ -35,11 +36,13 @@ class AdminService:
             message_repository: Repository for message operations
             config_repository: Repository for configuration operations
             cache_repository: Repository for cache operations
+            group_repository: Repository for group operations
             timezone: IANA timezone identifier for timestamp formatting (optional)
         """
         self.message_repository = message_repository
         self.config_repository = config_repository
         self.cache_repository = cache_repository
+        self.group_repository = group_repository
         self.timezone = timezone
     
     async def clear_database(self) -> None:
@@ -387,4 +390,95 @@ class AdminService:
             
         except Exception as e:
             logger.error(f"Failed to get statistics: {e}", exc_info=True)
+            raise
+
+    
+    async def get_all_groups(self) -> list:
+        """
+        Get all groups from database.
+        
+        Returns:
+            List of group models
+        """
+        try:
+            groups = await self.group_repository.get_all()
+            logger.info(f"Retrieved {len(groups)} groups")
+            return groups
+            
+        except Exception as e:
+            logger.error(f"Failed to get all groups: {e}", exc_info=True)
+            raise
+    
+    async def add_or_update_group(self, chat_id: int, title: str) -> None:
+        """
+        Add or update group information.
+        
+        Args:
+            chat_id: Telegram chat ID
+            title: Group title
+        """
+        try:
+            from database.models import GroupModel
+            
+            group = GroupModel(
+                chat_id=chat_id,
+                title=title,
+                is_enabled=True,
+                added_at=datetime.now()
+            )
+            
+            await self.group_repository.add_or_update(group)
+            logger.info(f"Group {chat_id} ({title}) added/updated")
+            
+        except Exception as e:
+            logger.error(f"Failed to add/update group: {e}", exc_info=True)
+            raise
+    
+    async def toggle_group(self, chat_id: int, enabled: bool) -> None:
+        """
+        Enable or disable a group.
+        
+        Args:
+            chat_id: Telegram chat ID
+            enabled: True to enable, False to disable
+        """
+        try:
+            await self.group_repository.set_enabled(chat_id, enabled)
+            status = "enabled" if enabled else "disabled"
+            logger.info(f"Group {chat_id} {status}")
+            
+        except Exception as e:
+            logger.error(f"Failed to toggle group: {e}", exc_info=True)
+            raise
+    
+    async def is_group_enabled(self, chat_id: int) -> bool:
+        """
+        Check if group is enabled.
+        
+        Args:
+            chat_id: Telegram chat ID
+            
+        Returns:
+            True if enabled, False if disabled
+        """
+        try:
+            return await self.group_repository.is_enabled(chat_id)
+            
+        except Exception as e:
+            logger.error(f"Failed to check if group is enabled: {e}", exc_info=True)
+            return True
+    
+    async def remove_group(self, chat_id: int) -> None:
+        """
+        Remove group from database.
+        
+        Args:
+            chat_id: Telegram chat ID
+        """
+        try:
+            await self.group_repository.delete(chat_id)
+            logger.info(f"Group {chat_id} removed from database")
+            
+        except Exception as e:
+            logger.error(f"Failed to remove group: {e}", exc_info=True)
             raise
