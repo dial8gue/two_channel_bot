@@ -178,9 +178,9 @@ async def main() -> None:
         collection_middleware = CollectionMiddleware(config)
         message_router.message.middleware(collection_middleware)
         
-        # Register group check middleware (checks if bot is enabled in group)
+        # Register group check middleware on dispatcher level (applies to ALL routers)
         group_check_middleware = GroupCheckMiddleware()
-        message_router.message.middleware(group_check_middleware)
+        dp.message.middleware(group_check_middleware)
         
         # Register routers
         logger.info("Registering routers...")
