@@ -470,12 +470,17 @@ class AdminService:
     
     async def remove_group(self, chat_id: int) -> None:
         """
-        Remove group from database.
+        Remove group from database and clear its messages.
         
         Args:
             chat_id: Telegram chat ID
         """
         try:
+            # Clear messages for this group
+            deleted_count = await self.message_repository.delete_by_chat_id(chat_id)
+            logger.info(f"Deleted {deleted_count} messages for group {chat_id}")
+            
+            # Remove group record
             await self.group_repository.delete(chat_id)
             logger.info(f"Group {chat_id} removed from database")
             

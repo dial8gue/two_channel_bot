@@ -413,6 +413,61 @@ class MessageRepository:
         except Exception as e:
             logger.error(f"Failed to get distinct chats: {e}", exc_info=True)
             raise
+    
+    async def delete_by_chat_id(self, chat_id: int) -> int:
+        """
+        Delete all messages for a specific chat.
+        
+        Args:
+            chat_id: Telegram chat ID
+            
+        Returns:
+            Number of deleted messages
+        """
+        conn = await self.db_connection.get_connection()
+        
+        try:
+            cursor = await conn.execute(
+                "DELETE FROM messages WHERE chat_id = ?",
+                (chat_id,)
+            )
+            await conn.commit()
+            
+            deleted_count = cursor.rowcount
+            logger.info(f"Deleted {deleted_count} messages for chat {chat_id}")
+            return deleted_count
+            
+        except Exception as e:
+            logger.error(f"Failed to delete messages for chat {chat_id}: {e}", exc_info=True)
+            await conn.rollback()
+            raise
+    async def delete_by_chat_id(self, chat_id: int) -> int:
+        """
+        Delete all messages for a specific chat.
+
+        Args:
+            chat_id: Telegram chat ID
+
+        Returns:
+            Number of deleted messages
+        """
+        conn = await self.db_connection.get_connection()
+
+        try:
+            cursor = await conn.execute(
+                "DELETE FROM messages WHERE chat_id = ?",
+                (chat_id,)
+            )
+            await conn.commit()
+
+            deleted_count = cursor.rowcount
+            logger.info(f"Deleted {deleted_count} messages for chat {chat_id}")
+            return deleted_count
+
+        except Exception as e:
+            logger.error(f"Failed to delete messages for chat {chat_id}: {e}", exc_info=True)
+            await conn.rollback()
+            raise
 
 
 class ConfigRepository:
