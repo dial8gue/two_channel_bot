@@ -58,6 +58,8 @@ async def set_commands():
             BotCommand(command="set_model", description="Установить модель OpenAI"),
             BotCommand(command="start_collection", description="Запустить сбор сообщений"),
             BotCommand(command="stop_collection", description="Остановить сбор сообщений"),
+            BotCommand(command="toggle_vision", description="Вкл/выкл распознавание изображений"),
+            BotCommand(command="manage_groups", description="Управление группами"),
         ]
         
         await bot.set_my_commands(
