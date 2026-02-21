@@ -5,7 +5,7 @@ from datetime import datetime
 
 from aiogram import Router
 from aiogram.types import Message, ChatMemberUpdated
-from aiogram.filters import ChatMemberUpdatedFilter, JOIN_TRANSITION
+from aiogram.filters import ChatMemberUpdatedFilter, JOIN_TRANSITION, LEAVE_TRANSITION
 from aiogram.enums import ChatType
 from aiogram.dispatcher.event.bases import SkipHandler
 
@@ -52,6 +52,35 @@ async def on_bot_added_to_group(event: ChatMemberUpdated, admin_service: AdminSe
         
     except Exception as e:
         logger.error(f"Error handling bot added to group: {e}", exc_info=True)
+
+
+@router.my_chat_member(ChatMemberUpdatedFilter(member_status_changed=LEAVE_TRANSITION))
+async def on_bot_removed_from_group(event: ChatMemberUpdated, admin_service: AdminService):
+    """
+    Handle bot being removed from a group.
+    
+    Removes the group and its messages from the database.
+    
+    Args:
+        event: Chat member update event
+        admin_service: Service for admin operations
+    """
+    try:
+        chat = event.chat
+        
+        if chat.type not in [ChatType.GROUP, ChatType.SUPERGROUP]:
+            return
+        
+        logger.info(
+            f"Bot removed from group: {chat.title} (ID: {chat.id})",
+            extra={"chat_id": chat.id, "chat_title": chat.title}
+        )
+        
+        await admin_service.remove_group(chat.id)
+        logger.info(f"Group {chat.id} and its messages removed from database")
+        
+    except Exception as e:
+        logger.error(f"Error handling bot removed from group: {e}", exc_info=True)
 
 
 @router.message(
