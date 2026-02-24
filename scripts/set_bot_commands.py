@@ -37,7 +37,7 @@ async def set_commands():
         
         # Commands for all group chats (available to all users)
         group_commands = [
-            BotCommand(command="anal", description="Анализ сообщений (8 часов)"),
+            BotCommand(command="anal", description="Анализ сообщений"),
             BotCommand(command="ask", description="Задать вопрос боту"),
         ]
         
