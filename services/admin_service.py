@@ -19,6 +19,8 @@ class AdminService:
     CONFIG_ANALYSIS_PERIOD = "analysis_period_hours"
     CONFIG_COLLECTION_ENABLED = "collection_enabled"
     CONFIG_OPENAI_MODEL = "openai_model"
+    CONFIG_CLASSIFIER_MODEL = "classifier_model"
+    CONFIG_VISION_MODEL = "vision_model"
     CONFIG_VISION_ENABLED = "vision_enabled"
     
     def __init__(
@@ -265,6 +267,108 @@ class AdminService:
             logger.error(f"Failed to get OpenAI model: {e}", exc_info=True)
             return None
     
+    async def set_classifier_model(self, model: str) -> None:
+        """
+        Set the model used for question classification (CHAT vs GENERAL).
+        
+        Args:
+            model: Model name (e.g., 'google/gemini-2.5-flash-lite')
+            
+        Raises:
+            ValueError: If model name is empty
+        """
+        try:
+            if not model or not model.strip():
+                raise ValueError("Model name cannot be empty")
+            
+            model = model.strip()
+            
+            await self.config_repository.set(
+                key=self.CONFIG_CLASSIFIER_MODEL,
+                value=model
+            )
+            
+            logger.info(
+                "Classifier model updated",
+                extra={"classifier_model": model}
+            )
+            
+        except ValueError:
+            raise
+        except Exception as e:
+            logger.error(
+                f"Failed to set classifier model: {e}",
+                extra={"model": model},
+                exc_info=True
+            )
+            raise
+    
+    async def get_classifier_model(self) -> Optional[str]:
+        """
+        Get the current classifier model setting.
+        
+        Returns:
+            Model name, or None if not set (uses default from env)
+        """
+        try:
+            value = await self.config_repository.get(self.CONFIG_CLASSIFIER_MODEL)
+            return value if value else None
+            
+        except Exception as e:
+            logger.error(f"Failed to get classifier model: {e}", exc_info=True)
+            return None
+    
+    async def set_vision_model(self, model: str) -> None:
+        """
+        Set the model used for image recognition (vision).
+        
+        Args:
+            model: Model name (e.g., 'google/gemini-2.5-flash')
+            
+        Raises:
+            ValueError: If model name is empty
+        """
+        try:
+            if not model or not model.strip():
+                raise ValueError("Model name cannot be empty")
+            
+            model = model.strip()
+            
+            await self.config_repository.set(
+                key=self.CONFIG_VISION_MODEL,
+                value=model
+            )
+            
+            logger.info(
+                "Vision model updated",
+                extra={"vision_model": model}
+            )
+            
+        except ValueError:
+            raise
+        except Exception as e:
+            logger.error(
+                f"Failed to set vision model: {e}",
+                extra={"model": model},
+                exc_info=True
+            )
+            raise
+    
+    async def get_vision_model(self) -> Optional[str]:
+        """
+        Get the current vision model setting.
+        
+        Returns:
+            Model name, or None if not set (uses default from env)
+        """
+        try:
+            value = await self.config_repository.get(self.CONFIG_VISION_MODEL)
+            return value if value else None
+            
+        except Exception as e:
+            logger.error(f"Failed to get vision model: {e}", exc_info=True)
+            return None
+    
     async def toggle_vision(self, enabled: bool) -> None:
         """
         Enable or disable image recognition (vision).
@@ -377,6 +481,14 @@ class AdminService:
             # Get OpenAI model setting
             openai_model = await self.get_openai_model()
             stats['openai_model'] = openai_model if openai_model else "Default (from env)"
+            
+            # Get classifier model setting
+            classifier_model = await self.get_classifier_model()
+            stats['classifier_model'] = classifier_model if classifier_model else "Default (from env)"
+            
+            # Get vision model setting
+            vision_model = await self.get_vision_model()
+            stats['vision_model'] = vision_model if vision_model else "Default (from env)"
             
             # Get vision setting
             stats['vision_enabled'] = await self.is_vision_enabled()

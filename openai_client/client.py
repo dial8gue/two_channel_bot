@@ -102,6 +102,117 @@ class OpenAIClient:
             Current model name
         """
         return self.model
+
+    def set_classifier_model(self, model: str) -> None:
+        """
+        Change the classifier model used for question routing (CHAT/GENERAL).
+        
+        Args:
+            model: New classifier model name
+        """
+        old_model = self.classifier_model
+        self.classifier_model = model
+        logger.info(
+            "Classifier model changed",
+            extra={"old_model": old_model, "new_model": model},
+        )
+    
+    def get_classifier_model(self) -> str:
+        """Get the current classifier model name."""
+        return self.classifier_model
+    
+    def set_vision_model(self, model: str) -> None:
+        """
+        Change the vision model used for image description.
+        
+        Args:
+            model: New vision model name
+        """
+        old_model = self.vision_model
+        self.vision_model = model
+        logger.info(
+            "Vision model changed",
+            extra={"old_model": old_model, "new_model": model},
+        )
+    
+    def get_vision_model(self) -> str:
+        """Get the current vision model name."""
+        return self.vision_model
+
+    @staticmethod
+    def _extract_reasoning_fallback(response) -> Optional[str]:
+        """
+        Try to extract answer text from reasoning fields when content is empty.
+        
+        Some OpenRouter reasoning models (e.g. z-ai/glm-4.7, deepseek-r1) may return
+        200 OK with empty `message.content` while the useful text sits in
+        `message.reasoning` or the last entry of `message.reasoning_details`.
+        
+        Returns the extracted text or None if nothing usable is found.
+        """
+        try:
+            dump = response.model_dump() if hasattr(response, "model_dump") else {}
+            choices = dump.get("choices") or []
+            if not choices:
+                return None
+            msg = choices[0].get("message") or {}
+            
+            reasoning = msg.get("reasoning")
+            if isinstance(reasoning, str) and reasoning.strip():
+                return reasoning.strip()
+            
+            details = msg.get("reasoning_details")
+            if isinstance(details, list) and details:
+                # Берём последний фрагмент — обычно это итоговый вывод модели
+                for entry in reversed(details):
+                    if not isinstance(entry, dict):
+                        continue
+                    text = entry.get("text") or entry.get("content") or entry.get("summary")
+                    if isinstance(text, str) and text.strip():
+                        return text.strip()
+        except Exception as e:
+            logger.warning(f"Failed to extract reasoning fallback: {e}")
+        return None
+    
+    def _log_empty_response(self, method: str, response) -> None:
+        """
+        Log diagnostic info when API returns empty content.
+        
+        Happens when provider returns 200 OK but content is empty/None.
+        Common causes: unknown model id, provider refusal, content filter,
+        max_tokens hit before any text, OpenRouter routing failure.
+        """
+        try:
+            choice = response.choices[0] if response.choices else None
+            msg = getattr(choice, "message", None) if choice else None
+            finish_reason = getattr(choice, "finish_reason", None) if choice else None
+            refusal = getattr(msg, "refusal", None) if msg else None
+            model_used = getattr(response, "model", None)
+            usage = getattr(response, "usage", None)
+            # OpenRouter-specific error field
+            raw_error = None
+            try:
+                raw = response.model_dump() if hasattr(response, "model_dump") else {}
+                raw_error = raw.get("error")
+            except Exception:
+                raw = {}
+            
+            logger.error(
+                "Empty response content from model API",
+                extra={
+                    "method": method,
+                    "configured_model": self.model,
+                    "model_returned": model_used,
+                    "finish_reason": finish_reason,
+                    "refusal": refusal,
+                    "prompt_tokens": getattr(usage, "prompt_tokens", None),
+                    "completion_tokens": getattr(usage, "completion_tokens", None),
+                    "raw_error": raw_error,
+                    "response_dump": raw,
+                }
+            )
+        except Exception as e:
+            logger.error(f"Failed to log empty response details: {e}", exc_info=True)
     
     async def analyze_messages(self, messages: List[MessageModel]) -> str:
         """
@@ -324,9 +435,21 @@ class OpenAIClient:
                 "Question answer received",
                 extra={
                     "tokens_used": response.usage.total_tokens,
-                    "response_length": len(answer) if answer else 0
+                    "response_length": len(answer) if answer else 0,
+                    "finish_reason": response.choices[0].finish_reason,
+                    "model_used": getattr(response, "model", self.model),
                 }
             )
+            
+            if not answer:
+                self._log_empty_response("answer_question", response)
+                answer = self._extract_reasoning_fallback(response)
+                if answer:
+                    logger.warning(
+                        "Recovered answer from reasoning fallback",
+                        extra={"method": "answer_question", "recovered_length": len(answer)},
+                    )
+                    answer = MessageFormatter.escape_usernames_markdown(answer)
             
             return answer or "Что-то пошло не так! Господи помилуй."
             
@@ -431,9 +554,20 @@ class OpenAIClient:
                 "Simple question answer received",
                 extra={
                     "tokens_used": response.usage.total_tokens,
-                    "response_length": len(answer) if answer else 0
+                    "response_length": len(answer) if answer else 0,
+                    "finish_reason": response.choices[0].finish_reason,
+                    "model_used": getattr(response, "model", self.model),
                 }
             )
+            
+            if not answer:
+                self._log_empty_response("answer_question_simple", response)
+                answer = self._extract_reasoning_fallback(response)
+                if answer:
+                    logger.warning(
+                        "Recovered answer from reasoning fallback",
+                        extra={"method": "answer_question_simple", "recovered_length": len(answer)},
+                    )
             
             return answer or "Что-то пошло не так! Господи помилуй."
             

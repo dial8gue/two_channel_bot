@@ -394,6 +394,8 @@ class MessageFormatter:
             ('cache_entries', '💾', 'Записей в кеше: *{value}*', False),
             ('storage_period_hours', '⏱', 'Период хранения: *{value} ч*', False),
             ('openai_model', '🤖', 'Модель OpenAI: `{value}`', False),
+            ('classifier_model', '🧭', 'Модель классификатора: `{value}`', False),
+            ('vision_model', '🖼', 'Vision-модель: `{value}`', False),
         ]
         
         try:

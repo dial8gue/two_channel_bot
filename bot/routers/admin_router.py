@@ -619,6 +619,126 @@ def create_admin_router(config: Config) -> Router:
             )
             await message.answer("❌ Ошибка при изменении модели.")
     
+    @router.message(Command("set_classifier_model"), admin_filter)
+    async def cmd_set_classifier_model(
+        message: Message,
+        admin_service: AdminService,
+        openai_client: OpenAIClient,
+    ):
+        """
+        Handle /set_classifier_model command to change classifier model.
+        
+        Usage: /set_classifier_model <model_name>
+        
+        Args:
+            message: Command message from admin
+            admin_service: Service for admin operations
+            openai_client: OpenAI client instance
+        """
+        try:
+            if not message.text or len(message.text.split()) < 2:
+                current = openai_client.get_classifier_model()
+                await message.answer(
+                    f"Текущая модель классификатора: `{current}`\n\n"
+                    "Использование: /set\\_classifier\\_model <название\\_модели>\n\n"
+                    "Примеры:\n"
+                    "• `google/gemini-2.5-flash-lite` — быстрая и дешёвая\n"
+                    "• `deepseek/deepseek-chat` — дешёвая\n"
+                    "• `gpt-4o-mini` — надёжная",
+                    parse_mode=ParseMode.MARKDOWN,
+                )
+                return
+            
+            model = message.text.split(maxsplit=1)[1].strip()
+            
+            logger.info(
+                "Set classifier model command received",
+                extra={"admin_id": message.from_user.id, "model": model},
+            )
+            
+            await admin_service.set_classifier_model(model)
+            openai_client.set_classifier_model(model)
+            
+            await message.answer(
+                f"✅ Модель классификатора изменена на: `{model}`",
+                parse_mode=ParseMode.MARKDOWN,
+            )
+            
+            logger.info(
+                "Classifier model updated",
+                extra={"admin_id": message.from_user.id, "model": model},
+            )
+            
+        except ValueError as e:
+            await message.answer(f"❌ {str(e)}")
+        except Exception as e:
+            logger.error(
+                f"Error setting classifier model: {e}",
+                extra={"admin_id": message.from_user.id if message.from_user else None},
+                exc_info=True,
+            )
+            await message.answer("❌ Ошибка при изменении модели классификатора.")
+    
+    @router.message(Command("set_vision_model"), admin_filter)
+    async def cmd_set_vision_model(
+        message: Message,
+        admin_service: AdminService,
+        openai_client: OpenAIClient,
+    ):
+        """
+        Handle /set_vision_model command to change vision model.
+        
+        Usage: /set_vision_model <model_name>
+        
+        Args:
+            message: Command message from admin
+            admin_service: Service for admin operations
+            openai_client: OpenAI client instance
+        """
+        try:
+            if not message.text or len(message.text.split()) < 2:
+                current = openai_client.get_vision_model()
+                await message.answer(
+                    f"Текущая vision-модель: `{current}`\n\n"
+                    "Использование: /set\\_vision\\_model <название\\_модели>\n\n"
+                    "Примеры:\n"
+                    "• `google/gemini-2.5-flash` — быстрая\n"
+                    "• `gpt-4o-mini` — от OpenAI\n"
+                    "• `anthropic/claude-3-haiku` — от Anthropic",
+                    parse_mode=ParseMode.MARKDOWN,
+                )
+                return
+            
+            model = message.text.split(maxsplit=1)[1].strip()
+            
+            logger.info(
+                "Set vision model command received",
+                extra={"admin_id": message.from_user.id, "model": model},
+            )
+            
+            await admin_service.set_vision_model(model)
+            openai_client.set_vision_model(model)
+            
+            await message.answer(
+                f"✅ Vision-модель изменена на: `{model}`",
+                parse_mode=ParseMode.MARKDOWN,
+            )
+            
+            logger.info(
+                "Vision model updated",
+                extra={"admin_id": message.from_user.id, "model": model},
+            )
+            
+        except ValueError as e:
+            await message.answer(f"❌ {str(e)}")
+        except Exception as e:
+            logger.error(
+                f"Error setting vision model: {e}",
+                extra={"admin_id": message.from_user.id if message.from_user else None},
+                exc_info=True,
+            )
+            await message.answer("❌ Ошибка при изменении vision-модели.")
+    
     @router.message(Command("toggle_vision"), admin_filter)
     async def cmd_toggle_vision(
         message: Message,

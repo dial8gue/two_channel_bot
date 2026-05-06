@@ -56,6 +56,8 @@ async def set_commands():
             BotCommand(command="set_storage", description="Установить период хранения"),
             BotCommand(command="set_analysis", description="Установить период анализа"),
             BotCommand(command="set_model", description="Установить модель OpenAI"),
+            BotCommand(command="set_classifier_model", description="Модель классификатора /ask"),
+            BotCommand(command="set_vision_model", description="Модель распознавания изображений"),
             BotCommand(command="start_collection", description="Запустить сбор сообщений"),
             BotCommand(command="stop_collection", description="Остановить сбор сообщений"),
             BotCommand(command="toggle_vision", description="Вкл/выкл распознавание изображений"),

@@ -131,6 +131,18 @@ async def main() -> None:
             openai_client.set_model(saved_model)
             logger.info(f"Loaded saved OpenAI model from database: {saved_model}")
         
+        # Check if there's a saved classifier model in database and apply it
+        saved_classifier = await config_repository.get("classifier_model")
+        if saved_classifier:
+            openai_client.set_classifier_model(saved_classifier)
+            logger.info(f"Loaded saved classifier model from database: {saved_classifier}")
+        
+        # Check if there's a saved vision model in database and apply it
+        saved_vision_model = await config_repository.get("vision_model")
+        if saved_vision_model:
+            openai_client.set_vision_model(saved_vision_model)
+            logger.info(f"Loaded saved vision model from database: {saved_vision_model}")
+        
         # Check if there's a saved vision setting in database and apply it
         saved_vision = await config_repository.get("vision_enabled")
         if saved_vision is not None:
