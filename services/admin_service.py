@@ -24,6 +24,10 @@ class AdminService:
     CONFIG_VISION_ENABLED = "vision_enabled"
     CONFIG_OPENAI_API_KEY = "openai_api_key"
     CONFIG_OPENAI_BASE_URL = "openai_base_url"
+    CONFIG_MAX_TOKENS = "max_tokens"
+    CONFIG_INLINE_MAX_TOKENS = "inline_max_tokens"
+    CONFIG_VISION_MAX_TOKENS = "vision_max_tokens"
+    CONFIG_INLINE_DEBOUNCE_SECONDS = "inline_debounce_seconds"
     
     def __init__(
         self,
@@ -444,6 +448,67 @@ class AdminService:
             logger.error(f"Failed to get OpenAI base URL: {e}", exc_info=True)
             return None
     
+    async def _set_positive_int(self, key: str, value: int, label: str) -> None:
+        """Helper: validate value is positive int and persist to config."""
+        try:
+            if value <= 0:
+                raise ValueError(f"{label} must be positive")
+            await self.config_repository.set(key=key, value=str(int(value)))
+            logger.info(f"{label} updated", extra={key: value})
+        except ValueError:
+            raise
+        except Exception as e:
+            logger.error(f"Failed to set {label}: {e}", extra={"value": value}, exc_info=True)
+            raise
+    
+    async def _get_optional_int(self, key: str) -> Optional[int]:
+        """Helper: read int value from config, None if unset or invalid."""
+        try:
+            value = await self.config_repository.get(key)
+            if value is None:
+                return None
+            return int(value)
+        except (TypeError, ValueError):
+            logger.warning(f"Invalid integer stored for config key '{key}'")
+            return None
+        except Exception as e:
+            logger.error(f"Failed to get config '{key}': {e}", exc_info=True)
+            return None
+    
+    async def set_max_tokens(self, value: int) -> None:
+        """Set MAX_TOKENS for analysis requests."""
+        await self._set_positive_int(self.CONFIG_MAX_TOKENS, value, "max_tokens")
+    
+    async def get_max_tokens(self) -> Optional[int]:
+        """Return persisted MAX_TOKENS override, or None if not set."""
+        return await self._get_optional_int(self.CONFIG_MAX_TOKENS)
+    
+    async def set_inline_max_tokens(self, value: int) -> None:
+        """Set INLINE_MAX_TOKENS for /ask answers."""
+        await self._set_positive_int(self.CONFIG_INLINE_MAX_TOKENS, value, "inline_max_tokens")
+    
+    async def get_inline_max_tokens(self) -> Optional[int]:
+        """Return persisted INLINE_MAX_TOKENS override, or None if not set."""
+        return await self._get_optional_int(self.CONFIG_INLINE_MAX_TOKENS)
+    
+    async def set_vision_max_tokens(self, value: int) -> None:
+        """Set VISION_MAX_TOKENS for image descriptions."""
+        await self._set_positive_int(self.CONFIG_VISION_MAX_TOKENS, value, "vision_max_tokens")
+    
+    async def get_vision_max_tokens(self) -> Optional[int]:
+        """Return persisted VISION_MAX_TOKENS override, or None if not set."""
+        return await self._get_optional_int(self.CONFIG_VISION_MAX_TOKENS)
+    
+    async def set_inline_debounce_seconds(self, value: int) -> None:
+        """Set INLINE_DEBOUNCE_SECONDS for /ask anti-spam."""
+        await self._set_positive_int(
+            self.CONFIG_INLINE_DEBOUNCE_SECONDS, value, "inline_debounce_seconds"
+        )
+    
+    async def get_inline_debounce_seconds(self) -> Optional[int]:
+        """Return persisted INLINE_DEBOUNCE_SECONDS override, or None if not set."""
+        return await self._get_optional_int(self.CONFIG_INLINE_DEBOUNCE_SECONDS)
+    
     async def toggle_vision(self, enabled: bool) -> None:
         """
         Enable or disable image recognition (vision).
@@ -579,6 +644,16 @@ class AdminService:
             
             # Get vision setting
             stats['vision_enabled'] = await self.is_vision_enabled()
+            
+            # Token limits and inline debounce
+            max_tokens = await self.get_max_tokens()
+            stats['max_tokens'] = max_tokens if max_tokens is not None else "Default (from env)"
+            inline_max_tokens = await self.get_inline_max_tokens()
+            stats['inline_max_tokens'] = inline_max_tokens if inline_max_tokens is not None else "Default (from env)"
+            vision_max_tokens = await self.get_vision_max_tokens()
+            stats['vision_max_tokens'] = vision_max_tokens if vision_max_tokens is not None else "Default (from env)"
+            inline_debounce = await self.get_inline_debounce_seconds()
+            stats['inline_debounce_seconds'] = inline_debounce if inline_debounce is not None else "Default (from env)"
             
             logger.info(
                 "Statistics gathered successfully",

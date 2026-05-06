@@ -193,6 +193,42 @@ class OpenAIClient:
         """Get the current vision model name."""
         return self.vision_model
 
+    def set_max_tokens(self, value: int) -> None:
+        """Change max_tokens used for analysis requests."""
+        if value <= 0:
+            raise ValueError("max_tokens must be positive")
+        old = self.max_tokens
+        self.max_tokens = int(value)
+        logger.info("max_tokens changed", extra={"old": old, "new": self.max_tokens})
+    
+    def get_max_tokens(self) -> int:
+        """Return current max_tokens for analysis."""
+        return self.max_tokens
+    
+    def set_inline_max_tokens(self, value: int) -> None:
+        """Change max_tokens used for inline /ask answers."""
+        if value <= 0:
+            raise ValueError("inline_max_tokens must be positive")
+        old = self.inline_max_tokens
+        self.inline_max_tokens = int(value)
+        logger.info("inline_max_tokens changed", extra={"old": old, "new": self.inline_max_tokens})
+    
+    def get_inline_max_tokens(self) -> int:
+        """Return current inline_max_tokens."""
+        return self.inline_max_tokens
+    
+    def set_vision_max_tokens(self, value: int) -> None:
+        """Change max_tokens used for vision image descriptions."""
+        if value <= 0:
+            raise ValueError("vision_max_tokens must be positive")
+        old = self.vision_max_tokens
+        self.vision_max_tokens = int(value)
+        logger.info("vision_max_tokens changed", extra={"old": old, "new": self.vision_max_tokens})
+    
+    def get_vision_max_tokens(self) -> int:
+        """Return current vision_max_tokens."""
+        return self.vision_max_tokens
+
     @staticmethod
     def _extract_reasoning_fallback(response) -> Optional[str]:
         """

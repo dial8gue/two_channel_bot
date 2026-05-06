@@ -894,6 +894,158 @@ def create_admin_router(config: Config) -> Router:
             )
             await message.answer("❌ Ошибка при изменении Base URL.")
     
+    async def _handle_int_setting(
+        message: Message,
+        value_name: str,
+        current_getter,
+        persist,
+        apply_live,
+        usage_examples: str,
+    ) -> None:
+        """
+        Generic handler for integer-valued admin settings.
+        
+        Args:
+            message: Incoming /set_* message.
+            value_name: Human-readable name (for logs/replies), e.g. "max_tokens".
+            current_getter: Callable returning the current live value (int).
+            persist: Async callable that persists value to DB (takes int).
+            apply_live: Callable that applies value to live state (takes int).
+            usage_examples: Markdown-escaped examples string shown on empty arg.
+        """
+        try:
+            parts = (message.text or "").split()
+            if len(parts) < 2:
+                current = current_getter()
+                safe_name = value_name.replace("_", "\\_")
+                await message.answer(
+                    f"Текущее значение `{safe_name}`: *{current}*\n\n"
+                    f"Использование: /set\\_{safe_name} <число>\n\n"
+                    f"{usage_examples}",
+                    parse_mode=ParseMode.MARKDOWN,
+                )
+                return
+            
+            try:
+                value = int(parts[1])
+            except ValueError:
+                await message.answer("❌ Значение должно быть целым числом.")
+                return
+            
+            if value <= 0:
+                await message.answer("❌ Значение должно быть положительным.")
+                return
+            
+            try:
+                await persist(value)
+            except ValueError as ve:
+                await message.answer(f"❌ {ve}")
+                return
+            
+            apply_live(value)
+            
+            safe_name = value_name.replace("_", "\\_")
+            await message.answer(
+                f"✅ `{safe_name}` обновлён: *{value}*",
+                parse_mode=ParseMode.MARKDOWN,
+            )
+            
+            logger.info(
+                f"{value_name} updated",
+                extra={"admin_id": message.from_user.id, value_name: value},
+            )
+        except Exception as e:
+            logger.error(
+                f"Error setting {value_name}: {e}",
+                extra={"admin_id": message.from_user.id if message.from_user else None},
+                exc_info=True,
+            )
+            await message.answer(f"❌ Ошибка при изменении {value_name}.")
+    
+    @router.message(Command("set_max_tokens"), admin_filter)
+    async def cmd_set_max_tokens(
+        message: Message,
+        admin_service: AdminService,
+        openai_client: OpenAIClient,
+    ):
+        """Set MAX_TOKENS for analysis requests."""
+        await _handle_int_setting(
+            message,
+            value_name="max_tokens",
+            current_getter=openai_client.get_max_tokens,
+            persist=admin_service.set_max_tokens,
+            apply_live=openai_client.set_max_tokens,
+            usage_examples=(
+                "Примеры:\n"
+                "• `2000` — экономно\n"
+                "• `4000` — стандартно\n"
+                "• `8000` — для длинных анализов"
+            ),
+        )
+    
+    @router.message(Command("set_inline_max_tokens"), admin_filter)
+    async def cmd_set_inline_max_tokens(
+        message: Message,
+        admin_service: AdminService,
+        openai_client: OpenAIClient,
+    ):
+        """Set INLINE_MAX_TOKENS for /ask answers."""
+        await _handle_int_setting(
+            message,
+            value_name="inline_max_tokens",
+            current_getter=openai_client.get_inline_max_tokens,
+            persist=admin_service.set_inline_max_tokens,
+            apply_live=openai_client.set_inline_max_tokens,
+            usage_examples=(
+                "Примеры:\n"
+                "• `500` — короткие ответы\n"
+                "• `2000` — обычно\n"
+                "• `4000` — c запасом под reasoning-модели"
+            ),
+        )
+    
+    @router.message(Command("set_vision_max_tokens"), admin_filter)
+    async def cmd_set_vision_max_tokens(
+        message: Message,
+        admin_service: AdminService,
+        openai_client: OpenAIClient,
+    ):
+        """Set VISION_MAX_TOKENS for image descriptions."""
+        await _handle_int_setting(
+            message,
+            value_name="vision_max_tokens",
+            current_getter=openai_client.get_vision_max_tokens,
+            persist=admin_service.set_vision_max_tokens,
+            apply_live=openai_client.set_vision_max_tokens,
+            usage_examples=(
+                "Примеры:\n"
+                "• `1000`\n"
+                "• `2000` — стандартно\n"
+                "• `4000` — для детальных описаний"
+            ),
+        )
+    
+    @router.message(Command("set_inline_debounce"), admin_filter)
+    async def cmd_set_inline_debounce(
+        message: Message,
+        admin_service: AdminService,
+        analysis_service: AnalysisService,
+    ):
+        """Set INLINE_DEBOUNCE_SECONDS (anti-spam for /ask)."""
+        await _handle_int_setting(
+            message,
+            value_name="inline_debounce_seconds",
+            current_getter=lambda: analysis_service.inline_debounce_seconds,
+            persist=admin_service.set_inline_debounce_seconds,
+            apply_live=lambda v: setattr(analysis_service, "inline_debounce_seconds", v),
+            usage_examples=(
+                "Примеры:\n"
+                "• `30` — почти без ограничений\n"
+                "• `600` — 10 минут\n"
+                "• `3600` — 1 час (стандартно)"
+            ),
+        )
+    
     @router.message(Command("toggle_vision"), admin_filter)
     async def cmd_toggle_vision(
         message: Message,

@@ -150,6 +150,20 @@ async def main() -> None:
                 f"{openai_client.get_base_url()}"
             )
         
+        # Load numeric token limits and inline debounce from database
+        for cfg_key, setter, label in [
+            ("max_tokens", openai_client.set_max_tokens, "max_tokens"),
+            ("inline_max_tokens", openai_client.set_inline_max_tokens, "inline_max_tokens"),
+            ("vision_max_tokens", openai_client.set_vision_max_tokens, "vision_max_tokens"),
+        ]:
+            saved = await config_repository.get(cfg_key)
+            if saved:
+                try:
+                    setter(int(saved))
+                    logger.info(f"Loaded saved {label} from database: {saved}")
+                except (ValueError, TypeError) as e:
+                    logger.warning(f"Invalid saved {label}='{saved}' in database: {e}")
+        
         # Check if there's a saved classifier model in database and apply it
         saved_classifier = await config_repository.get("classifier_model")
         if saved_classifier:
@@ -186,6 +200,23 @@ async def main() -> None:
             analysis_period_hours=config.analysis_period_hours,
             inline_debounce_seconds=config.inline_debounce_seconds
         )
+        
+        # Load saved inline_debounce_seconds override from database
+        saved_inline_debounce = await config_repository.get("inline_debounce_seconds")
+        if saved_inline_debounce:
+            try:
+                value = int(saved_inline_debounce)
+                if value > 0:
+                    analysis_service.inline_debounce_seconds = value
+                    logger.info(f"Loaded saved inline_debounce_seconds: {value}")
+                else:
+                    logger.warning(
+                        f"Ignoring non-positive saved inline_debounce_seconds: {saved_inline_debounce}"
+                    )
+            except (ValueError, TypeError) as e:
+                logger.warning(
+                    f"Invalid saved inline_debounce_seconds='{saved_inline_debounce}': {e}"
+                )
         
         admin_service = AdminService(
             message_repository=message_repository,

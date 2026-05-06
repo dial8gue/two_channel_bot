@@ -398,6 +398,10 @@ class MessageFormatter:
             ('vision_model', '🖼', 'Vision-модель: `{value}`', False),
             ('openai_base_url', '🌐', 'Base URL: `{value}`', False),
             ('openai_api_key', '🔑', 'API-ключ: `{value}`', False),
+            ('max_tokens', '🎚', 'max\\_tokens (analyze): *{value}*', False),
+            ('inline_max_tokens', '🎚', 'inline\\_max\\_tokens (/ask): *{value}*', False),
+            ('vision_max_tokens', '🎚', 'vision\\_max\\_tokens: *{value}*', False),
+            ('inline_debounce_seconds', '⏲', 'inline\\_debounce (/ask): *{value} сек*', False),
         ]
         
         try:
@@ -513,7 +517,6 @@ class MessageFormatter:
         time_str = MessageFormatter.format_debounce_wait_time(remaining_seconds)
         
         return (
-            f"⏳ *Погоди*\n"
             f"Ты недавно {operation}. Попробуй через {time_str}."
         )
 
