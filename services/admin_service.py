@@ -22,6 +22,8 @@ class AdminService:
     CONFIG_CLASSIFIER_MODEL = "classifier_model"
     CONFIG_VISION_MODEL = "vision_model"
     CONFIG_VISION_ENABLED = "vision_enabled"
+    CONFIG_OPENAI_API_KEY = "openai_api_key"
+    CONFIG_OPENAI_BASE_URL = "openai_base_url"
     
     def __init__(
         self,
@@ -369,6 +371,79 @@ class AdminService:
             logger.error(f"Failed to get vision model: {e}", exc_info=True)
             return None
     
+    async def set_openai_api_key(self, api_key: str) -> None:
+        """
+        Persist a new OpenAI API key in the config store.
+        
+        Args:
+            api_key: New API key
+        
+        Raises:
+            ValueError: If api_key is empty
+        """
+        try:
+            if not api_key or not api_key.strip():
+                raise ValueError("API key cannot be empty")
+            
+            api_key = api_key.strip()
+            await self.config_repository.set(
+                key=self.CONFIG_OPENAI_API_KEY,
+                value=api_key,
+            )
+            # Avoid logging the key itself
+            logger.info(
+                "OpenAI API key updated",
+                extra={"api_key_len": len(api_key)},
+            )
+        except ValueError:
+            raise
+        except Exception as e:
+            logger.error(f"Failed to set OpenAI API key: {e}", exc_info=True)
+            raise
+    
+    async def get_openai_api_key(self) -> Optional[str]:
+        """Return persisted API key override, or None if not set."""
+        try:
+            value = await self.config_repository.get(self.CONFIG_OPENAI_API_KEY)
+            return value if value else None
+        except Exception as e:
+            logger.error(f"Failed to get OpenAI API key: {e}", exc_info=True)
+            return None
+    
+    async def set_openai_base_url(self, base_url: Optional[str]) -> None:
+        """
+        Persist a new OpenAI base URL. Empty/None value clears the override
+        (client will use OpenAI's default endpoint).
+        
+        Args:
+            base_url: New base URL (e.g. 'https://openrouter.ai/api/v1')
+                     or empty string to reset to default.
+        """
+        try:
+            value = base_url.strip() if base_url else ""
+            await self.config_repository.set(
+                key=self.CONFIG_OPENAI_BASE_URL,
+                value=value,
+            )
+            logger.info(
+                "OpenAI base URL updated",
+                extra={"base_url": value or "default"},
+            )
+        except Exception as e:
+            logger.error(f"Failed to set OpenAI base URL: {e}", exc_info=True)
+            raise
+    
+    async def get_openai_base_url(self) -> Optional[str]:
+        """Return persisted base URL override (or None if not set / reset)."""
+        try:
+            value = await self.config_repository.get(self.CONFIG_OPENAI_BASE_URL)
+            if value is None or value == "":
+                return None
+            return value
+        except Exception as e:
+            logger.error(f"Failed to get OpenAI base URL: {e}", exc_info=True)
+            return None
+    
     async def toggle_vision(self, enabled: bool) -> None:
         """
         Enable or disable image recognition (vision).
@@ -489,6 +564,18 @@ class AdminService:
             # Get vision model setting
             vision_model = await self.get_vision_model()
             stats['vision_model'] = vision_model if vision_model else "Default (from env)"
+            
+            # Get OpenAI base URL override
+            base_url = await self.get_openai_base_url()
+            stats['openai_base_url'] = base_url if base_url else "Default (from env)"
+            
+            # Get masked API key status (never store/log the full key)
+            api_key = await self.get_openai_api_key()
+            if api_key:
+                from openai_client.client import OpenAIClient
+                stats['openai_api_key'] = OpenAIClient.mask_api_key(api_key)
+            else:
+                stats['openai_api_key'] = "Default (from env)"
             
             # Get vision setting
             stats['vision_enabled'] = await self.is_vision_enabled()

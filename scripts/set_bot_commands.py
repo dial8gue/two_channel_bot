@@ -58,6 +58,8 @@ async def set_commands():
             BotCommand(command="set_model", description="Установить модель OpenAI"),
             BotCommand(command="set_classifier_model", description="Модель классификатора /ask"),
             BotCommand(command="set_vision_model", description="Модель распознавания изображений"),
+            BotCommand(command="set_api_key", description="Установить OpenAI API-ключ"),
+            BotCommand(command="set_base_url", description="Установить OpenAI Base URL"),
             BotCommand(command="start_collection", description="Запустить сбор сообщений"),
             BotCommand(command="stop_collection", description="Остановить сбор сообщений"),
             BotCommand(command="toggle_vision", description="Вкл/выкл распознавание изображений"),

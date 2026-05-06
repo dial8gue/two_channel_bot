@@ -50,12 +50,10 @@ class OpenAIClient:
         """
         import httpx
         # Read timeout resets on each chunk received, so long generation won't be interrupted
-        client_kwargs = {"api_key": api_key}
-        client_kwargs["timeout"] = httpx.Timeout(connect=30.0, read=60.0, write=30.0, pool=30.0)
-        if base_url:
-            client_kwargs["base_url"] = base_url
-        
-        self.client = AsyncOpenAI(**client_kwargs)
+        self._timeout = httpx.Timeout(connect=30.0, read=60.0, write=30.0, pool=30.0)
+        self._api_key = api_key
+        self._base_url = base_url
+        self.client = self._build_client(api_key, base_url)
         self.model = model
         self.default_model = model  # Store default for reference
         self.classifier_model = classifier_model
@@ -79,6 +77,62 @@ class OpenAIClient:
                 "vision_max_tokens": vision_max_tokens
             }
         )
+    
+    def _build_client(self, api_key: str, base_url: Optional[str]) -> AsyncOpenAI:
+        """Build a new AsyncOpenAI client with given credentials."""
+        kwargs = {"api_key": api_key, "timeout": self._timeout}
+        if base_url:
+            kwargs["base_url"] = base_url
+        return AsyncOpenAI(**kwargs)
+    
+    @staticmethod
+    def mask_api_key(api_key: Optional[str]) -> str:
+        """
+        Return a masked representation of the API key safe for logging/display.
+        
+        Examples:
+            "sk-or-v1-a32cd4..."  →  "sk-or-v1…7629a"
+            ""/None               →  "(not set)"
+        """
+        if not api_key:
+            return "(not set)"
+        if len(api_key) <= 12:
+            return "***"
+        return f"{api_key[:8]}…{api_key[-4:]}"
+    
+    def set_api_key(self, api_key: str) -> None:
+        """
+        Replace the API key. Internally rebuilds the AsyncOpenAI client.
+        """
+        if not api_key or not api_key.strip():
+            raise ValueError("API key cannot be empty")
+        self._api_key = api_key.strip()
+        self.client = self._build_client(self._api_key, self._base_url)
+        logger.info(
+            "OpenAI API key changed",
+            extra={"api_key": self.mask_api_key(self._api_key)},
+        )
+    
+    def get_api_key_masked(self) -> str:
+        """Return masked current API key (safe for display)."""
+        return self.mask_api_key(self._api_key)
+    
+    def set_base_url(self, base_url: Optional[str]) -> None:
+        """
+        Replace the base URL. Pass empty string or None to reset to OpenAI default.
+        Rebuilds the AsyncOpenAI client.
+        """
+        value = base_url.strip() if base_url else None
+        self._base_url = value or None
+        self.client = self._build_client(self._api_key, self._base_url)
+        logger.info(
+            "OpenAI base URL changed",
+            extra={"base_url": self._base_url or "default"},
+        )
+    
+    def get_base_url(self) -> str:
+        """Return current base URL or 'default' if not set."""
+        return self._base_url or "default"
     
     def set_model(self, model: str) -> None:
         """

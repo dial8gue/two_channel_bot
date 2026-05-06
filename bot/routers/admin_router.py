@@ -739,6 +739,161 @@ def create_admin_router(config: Config) -> Router:
             )
             await message.answer("❌ Ошибка при изменении vision-модели.")
     
+    @router.message(Command("set_api_key"), admin_filter)
+    async def cmd_set_api_key(
+        message: Message,
+        admin_service: AdminService,
+        openai_client: OpenAIClient,
+    ):
+        """
+        Handle /set_api_key command to change OpenAI API key.
+        Only allowed in private chat with the admin. The incoming message
+        is deleted after processing so the key doesn't linger in chat history.
+        
+        Usage: /set_api_key <api_key>
+        """
+        try:
+            # Private-only, to avoid exposing the key in group history
+            if message.chat.type != ChatType.PRIVATE:
+                await message.answer(
+                    "⚠️ Эту команду можно использовать только в личке с ботом."
+                )
+                return
+            
+            if not message.text or len(message.text.split()) < 2:
+                current = openai_client.get_api_key_masked()
+                await message.answer(
+                    f"Текущий API\\-ключ: `{current}`\n\n"
+                    "Использование: /set\\_api\\_key <ключ>\n\n"
+                    "⚠️ После отправки ключ будет сохранён в БД бота, "
+                    "а твоё сообщение с ключом будет автоматически удалено.",
+                    parse_mode=ParseMode.MARKDOWN,
+                )
+                return
+            
+            api_key = message.text.split(maxsplit=1)[1].strip()
+            
+            logger.info(
+                "Set API key command received",
+                extra={
+                    "admin_id": message.from_user.id,
+                    "api_key": OpenAIClient.mask_api_key(api_key),
+                },
+            )
+            
+            # Delete the original message ASAP to remove the raw key from chat
+            try:
+                await message.delete()
+            except Exception as del_err:
+                logger.warning(f"Could not delete message with API key: {del_err}")
+            
+            try:
+                await admin_service.set_openai_api_key(api_key)
+                openai_client.set_api_key(api_key)
+            except ValueError as ve:
+                await message.answer(f"❌ {ve}")
+                return
+            
+            masked = openai_client.get_api_key_masked()
+            await message.answer(
+                f"✅ API\\-ключ обновлён: `{masked}`",
+                parse_mode=ParseMode.MARKDOWN,
+            )
+            
+            logger.info(
+                "OpenAI API key updated",
+                extra={"admin_id": message.from_user.id, "api_key": masked},
+            )
+            
+        except Exception as e:
+            logger.error(
+                f"Error setting API key: {e}",
+                extra={"admin_id": message.from_user.id if message.from_user else None},
+                exc_info=True,
+            )
+            await message.answer("❌ Ошибка при изменении API-ключа.")
+    
+    @router.message(Command("set_base_url"), admin_filter)
+    async def cmd_set_base_url(
+        message: Message,
+        admin_service: AdminService,
+        openai_client: OpenAIClient,
+    ):
+        """
+        Handle /set_base_url command to change OpenAI base URL.
+        Only allowed in private chat.
+        
+        Usage:
+            /set_base_url https://openrouter.ai/api/v1
+            /set_base_url default   — reset to OpenAI's default endpoint
+        """
+        try:
+            if message.chat.type != ChatType.PRIVATE:
+                await message.answer(
+                    "⚠️ Эту команду можно использовать только в личке с ботом."
+                )
+                return
+            
+            if not message.text or len(message.text.split()) < 2:
+                current = openai_client.get_base_url()
+                await message.answer(
+                    f"Текущий Base URL: `{current}`\n\n"
+                    "Использование:\n"
+                    "• /set\\_base\\_url <url> — задать свой endpoint\n"
+                    "• /set\\_base\\_url default — сбросить к стандартному OpenAI\n\n"
+                    "Примеры:\n"
+                    "• `https://openrouter.ai/api/v1`\n"
+                    "• `https://api.openai.com/v1`",
+                    parse_mode=ParseMode.MARKDOWN,
+                )
+                return
+            
+            raw = message.text.split(maxsplit=1)[1].strip()
+            reset = raw.lower() in ("default", "reset", "none", "-")
+            new_value = None if reset else raw
+            
+            # Light validation of URL shape
+            if new_value is not None and not (
+                new_value.startswith("http://") or new_value.startswith("https://")
+            ):
+                await message.answer(
+                    "❌ URL должен начинаться с `http://` или `https://`.",
+                    parse_mode=ParseMode.MARKDOWN,
+                )
+                return
+            
+            logger.info(
+                "Set base URL command received",
+                extra={
+                    "admin_id": message.from_user.id,
+                    "base_url": new_value or "default",
+                },
+            )
+            
+            await admin_service.set_openai_base_url(new_value or "")
+            openai_client.set_base_url(new_value)
+            
+            await message.answer(
+                f"✅ Base URL обновлён: `{openai_client.get_base_url()}`",
+                parse_mode=ParseMode.MARKDOWN,
+            )
+            
+            logger.info(
+                "OpenAI base URL updated",
+                extra={
+                    "admin_id": message.from_user.id,
+                    "base_url": openai_client.get_base_url(),
+                },
+            )
+            
+        except Exception as e:
+            logger.error(
+                f"Error setting base URL: {e}",
+                extra={"admin_id": message.from_user.id if message.from_user else None},
+                exc_info=True,
+            )
+            await message.answer("❌ Ошибка при изменении Base URL.")
+    
     @router.message(Command("toggle_vision"), admin_filter)
     async def cmd_toggle_vision(
         message: Message,

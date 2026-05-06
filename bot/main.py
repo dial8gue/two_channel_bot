@@ -131,6 +131,25 @@ async def main() -> None:
             openai_client.set_model(saved_model)
             logger.info(f"Loaded saved OpenAI model from database: {saved_model}")
         
+        # Check if there's a saved API key in database and apply it
+        saved_api_key = await config_repository.get("openai_api_key")
+        if saved_api_key:
+            openai_client.set_api_key(saved_api_key)
+            logger.info(
+                f"Loaded saved OpenAI API key from database: "
+                f"{openai_client.get_api_key_masked()}"
+            )
+        
+        # Check if there's a saved base URL in database and apply it
+        saved_base_url = await config_repository.get("openai_base_url")
+        if saved_base_url is not None:
+            # Empty string means "reset to default"
+            openai_client.set_base_url(saved_base_url if saved_base_url else None)
+            logger.info(
+                f"Loaded saved OpenAI base URL from database: "
+                f"{openai_client.get_base_url()}"
+            )
+        
         # Check if there's a saved classifier model in database and apply it
         saved_classifier = await config_repository.get("classifier_model")
         if saved_classifier:

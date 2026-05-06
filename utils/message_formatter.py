@@ -396,6 +396,8 @@ class MessageFormatter:
             ('openai_model', '🤖', 'Модель OpenAI: `{value}`', False),
             ('classifier_model', '🧭', 'Модель классификатора: `{value}`', False),
             ('vision_model', '🖼', 'Vision-модель: `{value}`', False),
+            ('openai_base_url', '🌐', 'Base URL: `{value}`', False),
+            ('openai_api_key', '🔑', 'API-ключ: `{value}`', False),
         ]
         
         try:
