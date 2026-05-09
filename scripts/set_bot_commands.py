@@ -64,9 +64,11 @@ async def set_commands():
             BotCommand(command="set_inline_max_tokens", description="Лимит токенов для /ask"),
             BotCommand(command="set_vision_max_tokens", description="Лимит токенов для vision"),
             BotCommand(command="set_inline_debounce", description="Антиспам /ask, сек"),
+            BotCommand(command="set_guest_debounce", description="Антиспам Guest Mode, сек"),
             BotCommand(command="start_collection", description="Запустить сбор сообщений"),
             BotCommand(command="stop_collection", description="Остановить сбор сообщений"),
             BotCommand(command="toggle_vision", description="Вкл/выкл распознавание изображений"),
+            BotCommand(command="toggle_guest", description="Вкл/выкл Guest Mode"),
             BotCommand(command="manage_groups", description="Управление группами"),
         ]
         

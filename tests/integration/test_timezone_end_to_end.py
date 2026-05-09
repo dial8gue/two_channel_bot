@@ -13,7 +13,8 @@ from database.repository import (
     MessageRepository,
     ConfigRepository,
     CacheRepository,
-    DebounceRepository
+    DebounceRepository,
+    GroupRepository,
 )
 from database.models import MessageModel
 from services.admin_service import AdminService
@@ -46,7 +47,8 @@ async def repositories(temp_db):
         'message': MessageRepository(temp_db),
         'config': ConfigRepository(temp_db),
         'cache': CacheRepository(temp_db),
-        'debounce': DebounceRepository(temp_db)
+        'debounce': DebounceRepository(temp_db),
+        'group': GroupRepository(temp_db),
     }
 
 
@@ -66,6 +68,7 @@ class TestTimezoneEndToEnd:
             message_repository=repositories['message'],
             config_repository=repositories['config'],
             cache_repository=repositories['cache'],
+            group_repository=repositories['group'],
             timezone=timezone
         )
         
@@ -123,6 +126,7 @@ class TestTimezoneEndToEnd:
             message_repository=repositories['message'],
             config_repository=repositories['config'],
             cache_repository=repositories['cache'],
+            group_repository=repositories['group'],
             timezone=None  # No timezone configured
         )
         

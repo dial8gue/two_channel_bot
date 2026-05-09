@@ -32,6 +32,7 @@ from bot.routers.reaction_router import router as reaction_router
 from bot.routers.admin_router import create_admin_router
 from bot.routers.user_router import create_user_router
 from bot.routers.ask_router import create_ask_router
+from bot.routers.guest_router import create_guest_router
 from bot.middlewares.collection_middleware import CollectionMiddleware
 from bot.middlewares.group_check_middleware import GroupCheckMiddleware
 
@@ -261,11 +262,19 @@ async def main() -> None:
         ask_router = create_ask_router(config)
         dp.include_router(ask_router)
         
+        # Guest Mode router (Bot API 10.0 / aiogram 3.28+)
+        # Only receives updates when 'Guest Mode' is enabled in @BotFather.
+        # Uses its own observer (guest_message), so ordering w.r.t. other
+        # routers doesn't matter for message routing.
+        guest_router = create_guest_router(config)
+        dp.include_router(guest_router)
+        
         # Inject dependencies into handlers
         dp['message_service'] = message_service
         dp['analysis_service'] = analysis_service
         dp['admin_service'] = admin_service
         dp['openai_client'] = openai_client
+        dp['debounce_manager'] = debounce_manager
         dp['config'] = config
         
         logger.info("Bot initialization complete")

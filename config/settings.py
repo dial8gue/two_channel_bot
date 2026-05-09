@@ -65,6 +65,10 @@ class Config:
     vision_enabled: bool
     vision_max_tokens: int
     
+    # Guest Mode (Bot API 10.0 / aiogram 3.28+)
+    guest_mode_enabled: bool
+    guest_debounce_seconds: int
+    
     @classmethod
     def from_env(cls) -> "Config":
         """
@@ -109,6 +113,10 @@ class Config:
         vision_enabled = cls._get_bool_env("VISION_ENABLED", default=True)
         vision_max_tokens = cls._get_int_env("VISION_MAX_TOKENS", default=2000)
         
+        # Guest Mode settings
+        guest_mode_enabled = cls._get_bool_env("GUEST_MODE_ENABLED", default=False)
+        guest_debounce_seconds = cls._get_int_env("GUEST_DEBOUNCE_SECONDS", default=60)
+        
         # Validate positive values
         cls._validate_positive("MAX_TOKENS", max_tokens)
         cls._validate_positive("STORAGE_PERIOD_HOURS", storage_period_hours)
@@ -122,6 +130,7 @@ class Config:
         cls._validate_positive("INLINE_DEBOUNCE_SECONDS", inline_debounce_seconds)
         cls._validate_positive("INLINE_MAX_TOKENS", inline_max_tokens)
         cls._validate_positive("VISION_MAX_TOKENS", vision_max_tokens)
+        cls._validate_positive("GUEST_DEBOUNCE_SECONDS", guest_debounce_seconds)
         
         # Validate parse mode
         valid_parse_modes = ["Markdown", "HTML", "None", None]
@@ -155,6 +164,8 @@ class Config:
             vision_model=vision_model,
             vision_enabled=vision_enabled,
             vision_max_tokens=vision_max_tokens,
+            guest_mode_enabled=guest_mode_enabled,
+            guest_debounce_seconds=guest_debounce_seconds,
         )
     
     @staticmethod

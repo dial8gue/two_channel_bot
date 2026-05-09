@@ -131,8 +131,11 @@ async def handle_group_message(message: Message, message_service: MessageService
         except Exception as e:
             logger.error(f"Failed to register group: {e}", exc_info=True)
         
-        # Extract text content or sticker description
-        text = message.text
+        # Extract text content.
+        # For photos/videos, the user-typed text lives in `caption`, not `text`.
+        # Missing this made @bot mentions inside captions (e.g., attaching a
+        # photo and writing "@bot what's this?") never reach ask_router.
+        text = message.text or message.caption
         
         if not text and message.sticker:
             # Build sticker description for analysis
@@ -142,16 +145,18 @@ async def handle_group_message(message: Message, message_service: MessageService
         if not text and message.animation:
             text = "[GIF]"
         
-        # Skip messages without text, sticker, or animation
+        # Nothing useful to persist (e.g., photo without caption, voice, etc.).
+        # Still let downstream routers run so ask_router can react to
+        # replies-to-bot or pure-media mentions.
         if not text:
             logger.debug(
-                "Skipping message without text, sticker, or animation",
+                "No storable text content, deferring to downstream routers",
                 extra={
                     "message_id": message.message_id,
                     "chat_id": message.chat.id
                 }
             )
-            return
+            raise SkipHandler()
         
         # Extract user information
         user_id = message.from_user.id if message.from_user else 0

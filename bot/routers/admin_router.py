@@ -1085,6 +1085,119 @@ def create_admin_router(config: Config) -> Router:
             await message.answer("❌ Ошибка при переключении распознавания изображений.")
     
     
+    @router.message(Command("toggle_guest"), admin_filter)
+    async def cmd_toggle_guest(
+        message: Message,
+        admin_service: AdminService,
+        config: Config,
+    ):
+        """
+        Toggle Guest Mode handler on/off.
+        
+        Note: this flag only controls whether the bot ANSWERS guest_message
+        updates. To actually receive them, 'Guest Mode' must be enabled in
+        @BotFather MiniApp for this bot.
+        """
+        try:
+            current_override = await admin_service.is_guest_mode_enabled()
+            # Resolve the effective current value to flip from.
+            current = (
+                current_override if current_override is not None
+                else config.guest_mode_enabled
+            )
+            new_state = not current
+            
+            await admin_service.toggle_guest_mode(new_state)
+            
+            status = "включен ✅" if new_state else "выключен ❌"
+            hint = (
+                "\n\n⚠️ Не забудь включить Guest Mode в настройках бота у "
+                "[@BotFather](https://t.me/BotFather), иначе Telegram не будет "
+                "присылать `guest_message` обновления."
+                if new_state else ""
+            )
+            await message.answer(
+                f"👤 Guest Mode: {status}{hint}",
+                parse_mode=ParseMode.MARKDOWN,
+                disable_web_page_preview=True,
+            )
+            
+            logger.info(
+                "Guest mode toggled",
+                extra={
+                    "admin_id": message.from_user.id,
+                    "guest_mode_enabled": new_state,
+                },
+            )
+        except Exception as e:
+            logger.error(
+                f"Error toggling guest mode: {e}",
+                extra={"admin_id": message.from_user.id if message.from_user else None},
+                exc_info=True,
+            )
+            await message.answer("❌ Ошибка при переключении Guest Mode.")
+    
+    @router.message(Command("set_guest_debounce"), admin_filter)
+    async def cmd_set_guest_debounce(
+        message: Message,
+        admin_service: AdminService,
+        config: Config,
+    ):
+        """Set per-user debounce interval for Guest Mode answers (seconds)."""
+        try:
+            parts = (message.text or "").split()
+            
+            if len(parts) < 2:
+                override = await admin_service.get_guest_debounce_seconds()
+                current = override if override is not None else config.guest_debounce_seconds
+                source = "из БД" if override is not None else "из env"
+                await message.answer(
+                    f"Текущее значение `guest\\_debounce\\_seconds`: *{current}* "
+                    f"\\({source}\\)\n\n"
+                    "Использование: /set\\_guest\\_debounce <число>\n\n"
+                    "Таймаут между гостевыми ответами одному пользователю.\n\n"
+                    "Примеры:\n"
+                    "• `30` — быстрый повтор\n"
+                    "• `60` — стандартно\n"
+                    "• `300` — агрессивный антиспам",
+                    parse_mode=ParseMode.MARKDOWN,
+                )
+                return
+            
+            try:
+                value = int(parts[1])
+            except ValueError:
+                await message.answer("❌ Значение должно быть целым числом.")
+                return
+            
+            if value <= 0:
+                await message.answer("❌ Значение должно быть положительным.")
+                return
+            
+            try:
+                await admin_service.set_guest_debounce_seconds(value)
+            except ValueError as ve:
+                await message.answer(f"❌ {ve}")
+                return
+            
+            await message.answer(
+                f"✅ `guest\\_debounce\\_seconds` обновлён: *{value}* сек",
+                parse_mode=ParseMode.MARKDOWN,
+            )
+            
+            logger.info(
+                "guest_debounce_seconds updated",
+                extra={"admin_id": message.from_user.id, "value": value},
+            )
+        except Exception as e:
+            logger.error(
+                f"Error setting guest_debounce_seconds: {e}",
+                extra={"admin_id": message.from_user.id if message.from_user else None},
+                exc_info=True,
+            )
+            await message.answer("❌ Ошибка при изменении guest_debounce_seconds.")
+    
+    
     @router.message(Command("manage_groups"), admin_filter)
     async def cmd_manage_groups(message: Message, admin_service: AdminService):
         """

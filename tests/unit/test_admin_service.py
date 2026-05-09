@@ -28,12 +28,24 @@ def mock_cache_repository():
 
 
 @pytest.fixture
-def admin_service(mock_message_repository, mock_config_repository, mock_cache_repository):
+def mock_group_repository():
+    """Mock group repository."""
+    return AsyncMock()
+
+
+@pytest.fixture
+def admin_service(
+    mock_message_repository,
+    mock_config_repository,
+    mock_cache_repository,
+    mock_group_repository,
+):
     """Create admin service with mocked dependencies."""
     return AdminService(
         message_repository=mock_message_repository,
         config_repository=mock_config_repository,
-        cache_repository=mock_cache_repository
+        cache_repository=mock_cache_repository,
+        group_repository=mock_group_repository,
     )
 
 
@@ -268,7 +280,8 @@ class TestAdminService:
         self,
         mock_message_repository,
         mock_config_repository,
-        mock_cache_repository
+        mock_cache_repository,
+        mock_group_repository,
     ):
         """Test get_stats formats timestamps with configured timezone."""
         # Arrange
@@ -276,6 +289,7 @@ class TestAdminService:
             message_repository=mock_message_repository,
             config_repository=mock_config_repository,
             cache_repository=mock_cache_repository,
+            group_repository=mock_group_repository,
             timezone="Europe/Moscow"
         )
         
@@ -318,11 +332,13 @@ class TestAdminService:
         assert stats['newest_message'] == "2024-01-15 17:00:00"
     
     @pytest.mark.asyncio
+    @pytest.mark.asyncio
     async def test_get_stats_uses_utc_when_timezone_is_none(
         self,
         mock_message_repository,
         mock_config_repository,
-        mock_cache_repository
+        mock_cache_repository,
+        mock_group_repository,
     ):
         """Test get_stats uses UTC when timezone is None."""
         # Arrange
@@ -330,6 +346,7 @@ class TestAdminService:
             message_repository=mock_message_repository,
             config_repository=mock_config_repository,
             cache_repository=mock_cache_repository,
+            group_repository=mock_group_repository,
             timezone=None
         )
         
@@ -370,3 +387,127 @@ class TestAdminService:
         # Should remain in UTC
         assert stats['oldest_message'] == "2024-01-15 10:00:00"
         assert stats['newest_message'] == "2024-01-15 14:00:00"
+
+
+@pytest.mark.unit
+class TestAdminServiceGuestMode:
+    """Tests for Guest Mode settings in AdminService."""
+
+    @pytest.mark.asyncio
+    async def test_toggle_guest_mode_enable(
+        self, admin_service, mock_config_repository
+    ):
+        """toggle_guest_mode(True) persists 'true'."""
+        await admin_service.toggle_guest_mode(True)
+        mock_config_repository.set.assert_called_once_with(
+            key="guest_mode_enabled", value="true"
+        )
+
+    @pytest.mark.asyncio
+    async def test_toggle_guest_mode_disable(
+        self, admin_service, mock_config_repository
+    ):
+        """toggle_guest_mode(False) persists 'false'."""
+        await admin_service.toggle_guest_mode(False)
+        mock_config_repository.set.assert_called_once_with(
+            key="guest_mode_enabled", value="false"
+        )
+
+    @pytest.mark.asyncio
+    async def test_is_guest_mode_enabled_true(
+        self, admin_service, mock_config_repository
+    ):
+        """is_guest_mode_enabled returns True when stored 'true'."""
+        mock_config_repository.get.return_value = "true"
+        assert await admin_service.is_guest_mode_enabled() is True
+
+    @pytest.mark.asyncio
+    async def test_is_guest_mode_enabled_false(
+        self, admin_service, mock_config_repository
+    ):
+        """is_guest_mode_enabled returns False when stored 'false'."""
+        mock_config_repository.get.return_value = "false"
+        assert await admin_service.is_guest_mode_enabled() is False
+
+    @pytest.mark.asyncio
+    async def test_is_guest_mode_enabled_unset_returns_none(
+        self, admin_service, mock_config_repository
+    ):
+        """
+        Unlike binary toggles, guest_mode must distinguish 'not set' from
+        'explicitly false' so callers can fall back to the env default.
+        """
+        mock_config_repository.get.return_value = None
+        assert await admin_service.is_guest_mode_enabled() is None
+
+    @pytest.mark.asyncio
+    async def test_set_guest_debounce_seconds_valid(
+        self, admin_service, mock_config_repository
+    ):
+        """set_guest_debounce_seconds persists numeric value as string."""
+        await admin_service.set_guest_debounce_seconds(120)
+        mock_config_repository.set.assert_called_once_with(
+            key="guest_debounce_seconds", value="120"
+        )
+
+    @pytest.mark.asyncio
+    async def test_set_guest_debounce_seconds_invalid(self, admin_service):
+        """Zero and negative values are rejected."""
+        with pytest.raises(ValueError):
+            await admin_service.set_guest_debounce_seconds(0)
+        with pytest.raises(ValueError):
+            await admin_service.set_guest_debounce_seconds(-5)
+
+    @pytest.mark.asyncio
+    async def test_get_guest_debounce_seconds_roundtrip(
+        self, admin_service, mock_config_repository
+    ):
+        """Stored integer value round-trips through get_guest_debounce_seconds."""
+        mock_config_repository.get.return_value = "90"
+        assert await admin_service.get_guest_debounce_seconds() == 90
+
+    @pytest.mark.asyncio
+    async def test_get_guest_debounce_seconds_unset(
+        self, admin_service, mock_config_repository
+    ):
+        """Returns None when the value was never set, so caller uses env default."""
+        mock_config_repository.get.return_value = None
+        assert await admin_service.get_guest_debounce_seconds() is None
+
+    @pytest.mark.asyncio
+    async def test_get_guest_debounce_seconds_invalid_db_value(
+        self, admin_service, mock_config_repository
+    ):
+        """
+        Malformed values in the DB shouldn't crash the whole stats call —
+        the helper must return None so defaults kick in.
+        """
+        mock_config_repository.get.return_value = "not-a-number"
+        assert await admin_service.get_guest_debounce_seconds() is None
+
+    @pytest.mark.asyncio
+    async def test_get_stats_includes_guest_mode_fields(
+        self,
+        admin_service,
+        mock_message_repository,
+        mock_cache_repository,
+        mock_config_repository,
+    ):
+        """get_stats exposes guest_mode_enabled and guest_debounce_seconds."""
+        mock_message_repository.count.return_value = 0
+        mock_message_repository.get_by_period.return_value = []
+        mock_cache_repository.count.return_value = 0
+
+        # Simulate: guest_mode_enabled=true stored, guest_debounce_seconds=45 stored
+        async def fake_get(key):
+            return {
+                "guest_mode_enabled": "true",
+                "guest_debounce_seconds": "45",
+            }.get(key)
+
+        mock_config_repository.get.side_effect = fake_get
+
+        stats = await admin_service.get_stats()
+
+        assert stats["guest_mode_enabled"] is True
+        assert stats["guest_debounce_seconds"] == 45

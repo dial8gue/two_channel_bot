@@ -28,6 +28,8 @@ class AdminService:
     CONFIG_INLINE_MAX_TOKENS = "inline_max_tokens"
     CONFIG_VISION_MAX_TOKENS = "vision_max_tokens"
     CONFIG_INLINE_DEBOUNCE_SECONDS = "inline_debounce_seconds"
+    CONFIG_GUEST_MODE_ENABLED = "guest_mode_enabled"
+    CONFIG_GUEST_DEBOUNCE_SECONDS = "guest_debounce_seconds"
     
     def __init__(
         self,
@@ -509,6 +511,61 @@ class AdminService:
         """Return persisted INLINE_DEBOUNCE_SECONDS override, or None if not set."""
         return await self._get_optional_int(self.CONFIG_INLINE_DEBOUNCE_SECONDS)
     
+    async def toggle_guest_mode(self, enabled: bool) -> None:
+        """
+        Enable or disable Guest Mode handler in the bot.
+        
+        Note: Guest Mode must also be enabled in @BotFather MiniApp for the
+        bot to receive `guest_message` updates at all. This flag only controls
+        whether our handler answers them.
+        
+        Args:
+            enabled: True to enable, False to disable
+        """
+        try:
+            await self.config_repository.set(
+                key=self.CONFIG_GUEST_MODE_ENABLED,
+                value="true" if enabled else "false",
+            )
+            status = "enabled" if enabled else "disabled"
+            logger.info(
+                f"Guest mode {status}",
+                extra={"guest_mode_enabled": enabled},
+            )
+        except Exception as e:
+            logger.error(
+                f"Failed to toggle guest mode: {e}",
+                extra={"enabled": enabled},
+                exc_info=True,
+            )
+            raise
+    
+    async def is_guest_mode_enabled(self) -> Optional[bool]:
+        """
+        Return persisted guest_mode_enabled override, or None if not set.
+        
+        Returns None when no explicit value is stored, so callers can fall back
+        to the env default from Config.
+        """
+        try:
+            value = await self.config_repository.get(self.CONFIG_GUEST_MODE_ENABLED)
+            if value is None:
+                return None
+            return value.lower() == "true"
+        except Exception as e:
+            logger.error(f"Failed to read guest_mode_enabled: {e}", exc_info=True)
+            return None
+    
+    async def set_guest_debounce_seconds(self, value: int) -> None:
+        """Set per-user debounce interval for guest_message answers."""
+        await self._set_positive_int(
+            self.CONFIG_GUEST_DEBOUNCE_SECONDS, value, "guest_debounce_seconds"
+        )
+    
+    async def get_guest_debounce_seconds(self) -> Optional[int]:
+        """Return persisted guest_debounce_seconds override, or None if not set."""
+        return await self._get_optional_int(self.CONFIG_GUEST_DEBOUNCE_SECONDS)
+    
     async def toggle_vision(self, enabled: bool) -> None:
         """
         Enable or disable image recognition (vision).
@@ -654,6 +711,11 @@ class AdminService:
             stats['vision_max_tokens'] = vision_max_tokens if vision_max_tokens is not None else "Default (from env)"
             inline_debounce = await self.get_inline_debounce_seconds()
             stats['inline_debounce_seconds'] = inline_debounce if inline_debounce is not None else "Default (from env)"
+            
+            # Guest Mode settings
+            stats['guest_mode_enabled'] = await self.is_guest_mode_enabled()
+            guest_debounce = await self.get_guest_debounce_seconds()
+            stats['guest_debounce_seconds'] = guest_debounce if guest_debounce is not None else "Default (from env)"
             
             logger.info(
                 "Statistics gathered successfully",

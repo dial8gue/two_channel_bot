@@ -386,40 +386,61 @@ class MessageFormatter:
         Returns:
             Formatted statistics message with Markdown
         """
-        # Statistics fields configuration: (key, emoji, template, requires_value)
+        # Statistics fields configuration: (key, template, requires_value)
+        # Each line starts with a plain bullet marker "•" for visual uniformity;
+        # per-field icons were dropped to reduce noise in the admin panel.
         STATS_FIELDS = [
-            ('total_messages', '📝', 'Всего сообщений: *{value}*', False),
-            ('oldest_message', '📅', 'Самое старое сообщение: {value}', True),
-            ('newest_message', '📅', 'Самое новое сообщение: {value}', True),
-            ('cache_entries', '💾', 'Записей в кеше: *{value}*', False),
-            ('storage_period_hours', '⏱', 'Период хранения: *{value} ч*', False),
-            ('openai_model', '🤖', 'Модель OpenAI: `{value}`', False),
-            ('classifier_model', '🧭', 'Модель классификатора: `{value}`', False),
-            ('vision_model', '🖼', 'Vision-модель: `{value}`', False),
-            ('openai_base_url', '🌐', 'Base URL: `{value}`', False),
-            ('openai_api_key', '🔑', 'API-ключ: `{value}`', False),
-            ('max_tokens', '🎚', 'max\\_tokens (analyze): *{value}*', False),
-            ('inline_max_tokens', '🎚', 'inline\\_max\\_tokens (/ask): *{value}*', False),
-            ('vision_max_tokens', '🎚', 'vision\\_max\\_tokens: *{value}*', False),
-            ('inline_debounce_seconds', '⏲', 'inline\\_debounce (/ask): *{value} сек*', False),
+            ('total_messages', 'Всего сообщений: *{value}*', False),
+            ('oldest_message', 'Самое старое сообщение: {value}', True),
+            ('newest_message', 'Самое новое сообщение: {value}', True),
+            ('cache_entries', 'Записей в кеше: *{value}*', False),
+            ('storage_period_hours', 'Период хранения: *{value} ч*', False),
+            ('openai_model', 'Модель OpenAI: `{value}`', False),
+            ('classifier_model', 'Модель классификатора: `{value}`', False),
+            ('vision_model', 'Vision-модель: `{value}`', False),
+            ('openai_base_url', 'Base URL: `{value}`', False),
+            ('openai_api_key', 'API-ключ: `{value}`', False),
+            ('max_tokens', 'max\\_tokens (analyze): *{value}*', False),
+            ('inline_max_tokens', 'inline\\_max\\_tokens (/ask): *{value}*', False),
+            ('vision_max_tokens', 'vision\\_max\\_tokens: *{value}*', False),
+            ('inline_debounce_seconds', 'inline\\_debounce (/ask): *{value} сек*', False),
+            ('guest_debounce_seconds', 'guest\\_debounce (/guest): *{value} сек*', False),
         ]
+        
+        BULLET = "•"
+        # Textual radio-button indicators for binary flags.
+        ON = "◉"
+        OFF = "○"
         
         try:
             message_parts = ["📈 *Статистика базы данных*\n"]
             
-            for key, emoji, template, requires_value in STATS_FIELDS:
+            for key, template, requires_value in STATS_FIELDS:
                 if key in stats and (not requires_value or stats[key]):
-                    message_parts.append(f"{emoji} {template.format(value=stats[key])}")
+                    message_parts.append(
+                        f"{BULLET} {template.format(value=stats[key])}"
+                    )
             
             # Special case for collection_enabled (boolean value with custom format)
             if 'collection_enabled' in stats:
-                status = "✅ Включен" if stats['collection_enabled'] else "❌ Выключен"
-                message_parts.append(f"🔄 Сбор сообщений: {status}")
+                status = f"{ON} Включен" if stats['collection_enabled'] else f"{OFF} Выключен"
+                message_parts.append(f"{BULLET} Сбор сообщений: {status}")
             
             # Special case for vision_enabled
             if 'vision_enabled' in stats:
-                status = "✅ Включено" if stats['vision_enabled'] else "❌ Выключено"
-                message_parts.append(f"🖼 Распознавание изображений: {status}")
+                status = f"{ON} Включено" if stats['vision_enabled'] else f"{OFF} Выключено"
+                message_parts.append(f"{BULLET} Распознавание изображений: {status}")
+            
+            # Special case for guest_mode_enabled (tri-state: True/False/None)
+            if 'guest_mode_enabled' in stats:
+                value = stats['guest_mode_enabled']
+                if value is None:
+                    status_text = "Guest Mode: _не задан_ (по умолчанию из env)"
+                elif value:
+                    status_text = f"Guest Mode: {ON} Включен"
+                else:
+                    status_text = f"Guest Mode: {OFF} Выключен"
+                message_parts.append(f"{BULLET} {status_text}")
             
             logger.debug("Formatted statistics message")
             return "\n".join(message_parts)

@@ -12,7 +12,8 @@ from database.repository import (
     MessageRepository,
     ConfigRepository,
     CacheRepository,
-    DebounceRepository
+    DebounceRepository,
+    GroupRepository,
 )
 from services.message_service import MessageService
 from services.analysis_service import AnalysisService
@@ -44,7 +45,8 @@ async def repositories(temp_db):
         'message': MessageRepository(temp_db),
         'config': ConfigRepository(temp_db),
         'cache': CacheRepository(temp_db),
-        'debounce': DebounceRepository(temp_db)
+        'debounce': DebounceRepository(temp_db),
+        'group': GroupRepository(temp_db),
     }
 
 
@@ -81,7 +83,8 @@ async def services(repositories, mock_openai_client):
     admin_service = AdminService(
         message_repository=repositories['message'],
         config_repository=repositories['config'],
-        cache_repository=repositories['cache']
+        cache_repository=repositories['cache'],
+        group_repository=repositories['group'],
     )
     
     return {
