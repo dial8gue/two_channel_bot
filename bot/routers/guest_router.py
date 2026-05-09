@@ -245,9 +245,14 @@ def create_guest_router(config: Config) -> Router:
                             "interval": debounce_interval,
                         },
                     )
-                    # Silently drop: Telegram only allows ONE reply per guest query,
-                    # and spending it on a "wait N seconds" notice for repeated
-                    # abuse would be counterproductive.
+                    # Each guest query has its own independent reply slot,
+                    # so spending this one on a throttling notice doesn't
+                    # cost the user their "real" answer — they'll get a
+                    # fresh slot on their next message.
+                    warning = MessageFormatter.format_debounce_warning(
+                        "задавал вопрос", remaining
+                    )
+                    await _safe_answer_guest(message, warning)
                     return
 
             # 3) Build the prompt
@@ -267,18 +272,52 @@ def create_guest_router(config: Config) -> Router:
                 )
                 return
 
-            # 4) Optional image description (vision)
+            # 4) Optional image description (vision).
+            #    Works for photos in the current message *and* in the
+            #    replied-to message.
             image_description = await _describe_image_if_any(message, openai_client)
-            if image_description:
-                full_question = f"{question}\n\n[Изображение: {image_description}]"
-            else:
-                full_question = question
 
-            # 5) Ask the model. Guest mode has no chat history, so use the
+            # 5) Extract the text of the replied-to message, if any.
+            #    Telegram includes reply_to_message in guest_message updates
+            #    exactly so the bot can use it as context. Without this,
+            #    "@bot what does X mean by this?" replying to a text post
+            #    would reach the model as just "what does X mean by this?",
+            #    losing the anchor message entirely.
+            reply_context: Optional[str] = None
+            reply = message.reply_to_message
+            if reply is not None:
+                reply_text = (reply.text or reply.caption or "").strip()
+                if reply_text:
+                    reply_author = ""
+                    if reply.from_user:
+                        reply_author = (
+                            reply.from_user.username
+                            or reply.from_user.first_name
+                            or ""
+                        )
+                    reply_context = (
+                        f"@{reply_author}: {reply_text}"
+                        if reply_author
+                        else reply_text
+                    )
+
+            # 6) Stitch everything the model should see into one prompt.
+            #    ``answer_question_simple`` has no structured context slot,
+            #    so we prepend the reply quote and/or image description in
+            #    human-readable form.
+            prompt_parts = []
+            if reply_context:
+                prompt_parts.append(f"[Цитата: {reply_context}]")
+            if image_description:
+                prompt_parts.append(f"[Изображение: {image_description}]")
+            prompt_parts.append(question)
+            full_question = "\n\n".join(prompt_parts)
+
+            # 7) Ask the model. Guest mode has no chat history, so use the
             # "simple" codepath that doesn't require MessageModel context.
             answer = await openai_client.answer_question_simple(full_question)
 
-            # 6) Reply via the dedicated guest method.
+            # 8) Reply via the dedicated guest method.
             await _safe_answer_guest(message, answer)
 
             # Mark as executed only after a successful reply so failed attempts

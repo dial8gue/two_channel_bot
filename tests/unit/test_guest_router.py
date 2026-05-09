@@ -268,11 +268,14 @@ async def test_handler_runs_when_db_override_enables_guest_mode_over_env():
 
 @pytest.mark.asyncio
 @pytest.mark.unit
-async def test_handler_skips_when_user_is_debounced():
+async def test_handler_replies_with_warning_when_user_is_debounced():
     """
-    Per-user debounce blocks the call. The handler must NOT reply (we only
-    get one guest answer per query, wasting it on a 'slow down' notice is
-    counterproductive) and must NOT call OpenAI.
+    When the per-user debounce blocks the request, the handler must send a
+    user-visible warning (not silently drop) and must NOT call OpenAI.
+    
+    Each guest query has its own reply slot, so spending this one on a
+    throttling notice is harmless — the user will still get a fresh slot
+    for their next real mention.
     """
     cfg = _make_config(guest_debounce_seconds=60)
     router = create_guest_router(cfg)
@@ -294,8 +297,8 @@ async def test_handler_skips_when_user_is_debounced():
     )
 
     openai_client.answer_question_simple.assert_not_awaited()
-    message.answer_guest_query.assert_not_called()
     debounce_manager.mark_executed.assert_not_awaited()
+    message.answer_guest_query.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -810,3 +813,153 @@ async def test_handler_handles_photo_with_mention_in_caption():
 
     # And a reply was produced for the single guest-answer slot.
     message.answer_guest_query.assert_called_once()
+
+
+# --------------------------------------------------------------------------- #
+# Regression: replied-to text must be forwarded as context                    #
+# --------------------------------------------------------------------------- #
+
+
+def _make_replied_text(
+    text: str,
+    *,
+    username: Optional[str] = "alice",
+    first_name: Optional[str] = None,
+):
+    """Build a Message-like stub to place into ``message.reply_to_message``."""
+    replied = MagicMock()
+    replied.text = text
+    replied.caption = None
+    replied.photo = []
+    from_user = MagicMock()
+    from_user.username = username
+    from_user.first_name = first_name
+    replied.from_user = from_user
+    return replied
+
+
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_handler_forwards_replied_text_into_prompt():
+    """
+    Regression for reported bug: when a guest message is a reply to a
+    text-only post (no photo), the original text of that post was being
+    dropped. Now it must be embedded into the prompt so the model has the
+    anchor the user was asking about.
+    """
+    cfg = _make_config()
+    router = create_guest_router(cfg)
+    handler = _extract_handler(router)
+
+    replied = _make_replied_text(
+        "The mitochondria is the powerhouse of the cell.",
+        username="alice",
+    )
+    message = _make_message(
+        text="@mybot is that even true?",
+        reply_to_message=replied,
+    )
+    bot = _make_bot(username="mybot")
+    openai_client = _make_openai_client(answer="Yes, roughly.")
+    admin_service = _make_admin_service()
+    debounce_manager = _make_debounce_manager()
+
+    await handler(
+        message=message,
+        bot=bot,
+        openai_client=openai_client,
+        admin_service=admin_service,
+        debounce_manager=debounce_manager,
+        config=cfg,
+    )
+
+    prompt = openai_client.answer_question_simple.call_args.args[0]
+    assert "mitochondria" in prompt
+    assert "@alice" in prompt
+    assert "is that even true?" in prompt
+
+
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_handler_forwards_replied_text_without_username():
+    """
+    If the replied-to user has neither a username nor a first_name, the
+    quote should still be attached without an empty ``@:`` prefix.
+    """
+    cfg = _make_config()
+    router = create_guest_router(cfg)
+    handler = _extract_handler(router)
+
+    replied = _make_replied_text(
+        "anonymous wisdom",
+        username=None,
+        first_name=None,
+    )
+    message = _make_message(
+        text="@mybot explain",
+        reply_to_message=replied,
+    )
+    bot = _make_bot(username="mybot")
+    openai_client = _make_openai_client(answer="ok")
+    admin_service = _make_admin_service()
+    debounce_manager = _make_debounce_manager()
+
+    await handler(
+        message=message,
+        bot=bot,
+        openai_client=openai_client,
+        admin_service=admin_service,
+        debounce_manager=debounce_manager,
+        config=cfg,
+    )
+
+    prompt = openai_client.answer_question_simple.call_args.args[0]
+    assert "anonymous wisdom" in prompt
+    # No stray "@:" marker when we had no author to attribute.
+    assert "@:" not in prompt
+
+
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_handler_combines_reply_text_and_image_description():
+    """
+    When replying to a text post AND attaching a photo of your own, the
+    prompt should contain *both* the quoted text and the image description.
+    """
+    cfg = _make_config()
+    router = create_guest_router(cfg)
+    handler = _extract_handler(router)
+
+    replied = _make_replied_text("I found this yesterday:", username="bob")
+    photo = _make_photo()
+    message = _make_message(
+        text="@mybot is it a threat?",
+        photo=[photo],
+        reply_to_message=replied,
+    )
+    bot = _make_bot(username="mybot")
+    openai_client = _make_openai_client(
+        vision_enabled=True,
+        answer="Probably a harmless mushroom.",
+        describe_image_result="A red mushroom with white spots.",
+    )
+    admin_service = _make_admin_service()
+    debounce_manager = _make_debounce_manager()
+
+    async def fake_download(_photo, destination):
+        destination.write(b"\x00")
+    message.bot.download = AsyncMock(side_effect=fake_download)
+
+    await handler(
+        message=message,
+        bot=bot,
+        openai_client=openai_client,
+        admin_service=admin_service,
+        debounce_manager=debounce_manager,
+        config=cfg,
+    )
+
+    prompt = openai_client.answer_question_simple.call_args.args[0]
+    assert "I found this yesterday" in prompt
+    assert "A red mushroom with white spots." in prompt
+    assert "is it a threat?" in prompt
