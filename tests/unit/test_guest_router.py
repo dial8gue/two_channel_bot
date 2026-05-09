@@ -36,11 +36,13 @@ def _make_config(
     *,
     guest_mode_enabled: bool = True,
     guest_debounce_seconds: int = 60,
+    admin_id: int = 1,
 ):
     """Build a minimal Config-like stub sufficient for the handler."""
     cfg = MagicMock()
     cfg.guest_mode_enabled = guest_mode_enabled
     cfg.guest_debounce_seconds = guest_debounce_seconds
+    cfg.admin_id = admin_id
     return cfg
 
 
@@ -67,21 +69,28 @@ def _make_message(
     message.reply_to_message = reply_to_message
 
     if user_id is not None:
-        caller_user = MagicMock()
-        caller_user.id = user_id
-        message.guest_bot_caller_user = caller_user
+        # Primary author comes in ``from_user`` (standard Message field).
+        # The ``guest_bot_caller_*`` fields are populated by Telegram only
+        # on outgoing guest-bot messages, not on incoming ones.
+        user = MagicMock()
+        user.id = user_id
+        user.username = "alice"
+        user.first_name = "Alice"
+        user.is_bot = False
+        message.from_user = user
     else:
-        message.guest_bot_caller_user = None
+        message.from_user = None
+
+    # Leave the caller_* fields empty by default so the test mirrors the
+    # real-world shape of an incoming guest_message.
+    message.guest_bot_caller_user = None
+    message.guest_bot_caller_chat = None
 
     if chat_id is not None:
-        caller_chat = MagicMock()
-        caller_chat.id = chat_id
-        message.guest_bot_caller_chat = caller_chat
         chat = MagicMock()
         chat.id = chat_id
         message.chat = chat
     else:
-        message.guest_bot_caller_chat = None
         message.chat = None
 
     message.bot = AsyncMock()
@@ -963,3 +972,123 @@ async def test_handler_combines_reply_text_and_image_description():
     assert "I found this yesterday" in prompt
     assert "A red mushroom with white spots." in prompt
     assert "is it a threat?" in prompt
+
+
+# --------------------------------------------------------------------------- #
+# Regression: debounce must key off message.from_user.id                      #
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_handler_uses_from_user_id_for_debounce_key():
+    """
+    Regression for reported bug: the handler previously read the user id
+    from ``message.guest_bot_caller_user``, which Telegram only populates
+    on messages **sent by** a guest bot — not on incoming guest_message
+    updates. On every real guest query the attribute was None, so the
+    ``if user_id is not None`` guard skipped the whole debounce block
+    and the bot answered on every mention unconditionally.
+    
+    Expected now: the debounce key is derived from ``message.from_user.id``,
+    which is what Telegram actually fills on incoming guest_message updates.
+    """
+    cfg = _make_config(guest_debounce_seconds=60)
+    router = create_guest_router(cfg)
+    handler = _extract_handler(router)
+
+    message = _make_message(user_id=777)
+    bot = _make_bot()
+    openai_client = _make_openai_client(answer="ok")
+    admin_service = _make_admin_service()
+    debounce_manager = _make_debounce_manager()
+
+    await handler(
+        message=message,
+        bot=bot,
+        openai_client=openai_client,
+        admin_service=admin_service,
+        debounce_manager=debounce_manager,
+        config=cfg,
+    )
+
+    # The debounce probe must have been attempted (this is what the bug broke).
+    debounce_manager.can_execute.assert_awaited_once()
+    operation_key = debounce_manager.can_execute.call_args.args[0]
+    assert operation_key == "guest:777"
+
+    # After a successful reply the user's budget is consumed.
+    debounce_manager.mark_executed.assert_awaited_once_with("guest:777")
+
+
+# --------------------------------------------------------------------------- #
+# Admin bypass for debounce (parity with /ask)                                #
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_admin_bypasses_debounce_check():
+    """
+    The admin (matched by ``message.from_user.id == config.admin_id``)
+    must not be subjected to the per-user debounce — same contract as
+    /ask in normal chats. ``can_execute`` must never be called for them.
+    """
+    cfg = _make_config(admin_id=42, guest_debounce_seconds=60)
+    router = create_guest_router(cfg)
+    handler = _extract_handler(router)
+
+    message = _make_message(user_id=42)  # matches admin_id
+    bot = _make_bot()
+    openai_client = _make_openai_client(answer="ok")
+    admin_service = _make_admin_service()
+    debounce_manager = _make_debounce_manager()
+
+    await handler(
+        message=message,
+        bot=bot,
+        openai_client=openai_client,
+        admin_service=admin_service,
+        debounce_manager=debounce_manager,
+        config=cfg,
+    )
+
+    debounce_manager.can_execute.assert_not_awaited()
+    # And no budget consumed — so repeated admin calls stay unthrottled.
+    debounce_manager.mark_executed.assert_not_awaited()
+    # Admin still got their answer like a normal user.
+    openai_client.answer_question_simple.assert_awaited_once()
+    message.answer_guest_query.assert_called_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_non_admin_still_goes_through_debounce():
+    """
+    Sanity check: non-admin user ids still hit the debounce path. This
+    makes sure the admin branch doesn't accidentally short-circuit the
+    whole throttling logic.
+    """
+    cfg = _make_config(admin_id=42, guest_debounce_seconds=60)
+    router = create_guest_router(cfg)
+    handler = _extract_handler(router)
+
+    message = _make_message(user_id=7)  # NOT the admin
+    bot = _make_bot()
+    openai_client = _make_openai_client(answer="ok")
+    admin_service = _make_admin_service()
+    debounce_manager = _make_debounce_manager()
+
+    await handler(
+        message=message,
+        bot=bot,
+        openai_client=openai_client,
+        admin_service=admin_service,
+        debounce_manager=debounce_manager,
+        config=cfg,
+    )
+
+    debounce_manager.can_execute.assert_awaited_once()
+    operation_key = debounce_manager.can_execute.call_args.args[0]
+    assert operation_key == "guest:7"
+    debounce_manager.mark_executed.assert_awaited_once_with("guest:7")

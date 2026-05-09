@@ -203,12 +203,16 @@ def create_guest_router(config: Config) -> Router:
                 logger.warning("guest_message without guest_query_id — skipping")
                 return
 
-            caller_user = message.guest_bot_caller_user
-            caller_chat = message.guest_bot_caller_chat
+            # ``guest_bot_caller_user`` / ``guest_bot_caller_chat`` are only
+            # populated on messages **sent by** a guest bot (so other bots can
+            # see whom it served). On **incoming** guest_message updates, the
+            # author is the regular ``from_user`` and the venue is ``chat``.
+            # Fall back to the caller_* fields only for defensive parity.
+            caller_user = message.from_user or message.guest_bot_caller_user
+            caller_chat = message.chat or message.guest_bot_caller_chat
             user_id = caller_user.id if caller_user else None
-            chat_id = caller_chat.id if caller_chat else (
-                message.chat.id if message.chat else None
-            )
+            chat_id = caller_chat.id if caller_chat else None
+            is_admin = user_id is not None and user_id == config.admin_id
 
             logger.info(
                 "Guest query received",
@@ -216,6 +220,7 @@ def create_guest_router(config: Config) -> Router:
                     "guest_query_id": message.guest_query_id,
                     "user_id": user_id,
                     "chat_id": chat_id,
+                    "is_admin": is_admin,
                     "has_photo": bool(message.photo),
                     "has_reply": bool(message.reply_to_message),
                 },
@@ -229,8 +234,10 @@ def create_guest_router(config: Config) -> Router:
                 )
                 return
 
-            # 2) Per-user debounce
-            if user_id is not None:
+            # 2) Per-user debounce. Admin bypasses it for parity with /ask:
+            # operator should be able to test the bot without hitting their
+            # own rate limit.
+            if user_id is not None and not is_admin:
                 debounce_interval = await _resolve_guest_debounce(admin_service, config)
                 operation_key = f"guest:{user_id}"
                 can_run, remaining = await debounce_manager.can_execute(
@@ -321,8 +328,9 @@ def create_guest_router(config: Config) -> Router:
             await _safe_answer_guest(message, answer)
 
             # Mark as executed only after a successful reply so failed attempts
-            # don't consume the user's debounce budget.
-            if user_id is not None:
+            # don't consume the user's debounce budget. Admin is exempt for
+            # parity with the rest of the debounce logic above.
+            if user_id is not None and not is_admin:
                 try:
                     await debounce_manager.mark_executed(f"guest:{user_id}")
                 except Exception as mark_err:
