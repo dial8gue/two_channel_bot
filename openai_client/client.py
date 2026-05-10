@@ -426,7 +426,7 @@ class OpenAIClient:
     # answers. Used both when formatting (see _format_sources_block) and
     # when deciding whether to disable Telegram's link preview on the
     # outgoing message.
-    SOURCES_BLOCK_MARKER = "🔗 *Источники:*"
+    SOURCES_BLOCK_MARKER = "*Источники:*"
 
     @staticmethod
     def _format_sources_block(citations: list, max_items: int = 3) -> str:
