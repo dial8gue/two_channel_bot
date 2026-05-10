@@ -8,7 +8,7 @@ from typing import List, Optional
 from openai import AsyncOpenAI, RateLimitError, APIConnectionError
 from openai import APIError as OpenAIAPIError
 from database.models import MessageModel
-from utils.timezone_helper import format_datetime
+from utils.timezone_helper import format_datetime, convert_to_timezone
 from utils.message_formatter import MessageFormatter
 from .prompts import (
     ANALYSIS_SYSTEM_PROMPT,
@@ -16,6 +16,7 @@ from .prompts import (
     QUESTION_WITH_CONTEXT_SYSTEM_PROMPT,
     SIMPLE_QUESTION_SYSTEM_PROMPT,
     IMAGE_DESCRIPTION_SYSTEM_PROMPT,
+    WEB_SEARCH_RULE_SUFFIX,
     build_analysis_user_prompt,
     build_question_user_prompt,
 )
@@ -32,7 +33,7 @@ class OpenAIClientError(Exception):
 class OpenAIClient:
     """Client for interacting with OpenAI API to analyze messages."""
     
-    def __init__(self, api_key: str, base_url: str = None, model: str = "gpt-4o-mini", classifier_model: str = "deepseek/deepseek-chat", max_tokens: int = 4000, inline_max_tokens: int = 500, timezone: Optional[str] = None, vision_model: str = "google/gemini-2.5-flash", vision_enabled: bool = True, vision_max_tokens: int = 2000):
+    def __init__(self, api_key: str, base_url: str = None, model: str = "gpt-4o-mini", classifier_model: str = "deepseek/deepseek-chat", max_tokens: int = 4000, inline_max_tokens: int = 500, timezone: Optional[str] = None, vision_model: str = "google/gemini-2.5-flash", vision_enabled: bool = True, vision_max_tokens: int = 2000, web_search_enabled: bool = False, web_search_engine: str = "exa", web_search_max_results: int = 3, web_search_max_total_results: int = 3, web_search_context_size: str = "low"):
         """
         Initialize OpenAI client.
         
@@ -47,6 +48,11 @@ class OpenAIClient:
             vision_model: Model to use for image recognition
             vision_enabled: Whether image recognition is enabled
             vision_max_tokens: Maximum tokens for vision API requests
+            web_search_enabled: Whether OpenRouter web search server tool is attached
+            web_search_engine: Search engine: auto | native | exa | firecrawl | parallel
+            web_search_max_results: Max results per single search call
+            web_search_max_total_results: Max total results across all search calls in a request
+            web_search_context_size: Context size per result: low | medium | high
         """
         import httpx
         # Read timeout resets on each chunk received, so long generation won't be interrupted
@@ -63,6 +69,12 @@ class OpenAIClient:
         self.vision_model = vision_model
         self.vision_enabled = vision_enabled
         self.vision_max_tokens = vision_max_tokens
+        # Web search (OpenRouter server tool) settings
+        self.web_search_enabled = web_search_enabled
+        self.web_search_engine = web_search_engine
+        self.web_search_max_results = int(web_search_max_results)
+        self.web_search_max_total_results = int(web_search_max_total_results)
+        self.web_search_context_size = web_search_context_size
         logger.info(
             "OpenAI client initialized",
             extra={
@@ -74,7 +86,12 @@ class OpenAIClient:
                 "timezone": timezone or "UTC",
                 "vision_model": vision_model,
                 "vision_enabled": vision_enabled,
-                "vision_max_tokens": vision_max_tokens
+                "vision_max_tokens": vision_max_tokens,
+                "web_search_enabled": web_search_enabled,
+                "web_search_engine": web_search_engine,
+                "web_search_max_results": self.web_search_max_results,
+                "web_search_max_total_results": self.web_search_max_total_results,
+                "web_search_context_size": web_search_context_size,
             }
         )
     
@@ -228,6 +245,252 @@ class OpenAIClient:
     def get_vision_max_tokens(self) -> int:
         """Return current vision_max_tokens."""
         return self.vision_max_tokens
+
+    # ------------------------------------------------------------------ #
+    # Web Search (OpenRouter server tool) configuration                  #
+    # ------------------------------------------------------------------ #
+
+    _VALID_WEB_ENGINES = {"auto", "native", "exa", "firecrawl", "parallel"}
+    _VALID_WEB_CONTEXT_SIZES = {"low", "medium", "high"}
+
+    def set_web_search_enabled(self, enabled: bool) -> None:
+        """Enable or disable attaching the OpenRouter web search tool."""
+        old = self.web_search_enabled
+        self.web_search_enabled = bool(enabled)
+        logger.info(
+            "web_search_enabled changed",
+            extra={"old": old, "new": self.web_search_enabled},
+        )
+
+    def get_web_search_enabled(self) -> bool:
+        """Return current web_search_enabled flag."""
+        return self.web_search_enabled
+
+    def set_web_search_engine(self, engine: str) -> None:
+        """Change the search engine used by the OpenRouter web search tool."""
+        if not engine:
+            raise ValueError("engine cannot be empty")
+        engine = engine.strip().lower()
+        if engine not in self._VALID_WEB_ENGINES:
+            raise ValueError(
+                f"engine must be one of {sorted(self._VALID_WEB_ENGINES)}, got: {engine}"
+            )
+        old = self.web_search_engine
+        self.web_search_engine = engine
+        logger.info(
+            "web_search_engine changed",
+            extra={"old": old, "new": engine},
+        )
+
+    def get_web_search_engine(self) -> str:
+        """Return current web search engine."""
+        return self.web_search_engine
+
+    def set_web_search_max_results(self, value: int) -> None:
+        """Change max results per single search call (1..25)."""
+        if value <= 0:
+            raise ValueError("web_search_max_results must be positive")
+        if value > 25:
+            raise ValueError("web_search_max_results must be <= 25")
+        old = self.web_search_max_results
+        self.web_search_max_results = int(value)
+        logger.info(
+            "web_search_max_results changed",
+            extra={"old": old, "new": self.web_search_max_results},
+        )
+
+    def get_web_search_max_results(self) -> int:
+        """Return max results per single search call."""
+        return self.web_search_max_results
+
+    def set_web_search_max_total_results(self, value: int) -> None:
+        """Change max total results across all search calls in a single request."""
+        if value <= 0:
+            raise ValueError("web_search_max_total_results must be positive")
+        old = self.web_search_max_total_results
+        self.web_search_max_total_results = int(value)
+        logger.info(
+            "web_search_max_total_results changed",
+            extra={"old": old, "new": self.web_search_max_total_results},
+        )
+
+    def get_web_search_max_total_results(self) -> int:
+        """Return max total results across all search calls."""
+        return self.web_search_max_total_results
+
+    def set_web_search_context_size(self, value: str) -> None:
+        """Change search_context_size: low | medium | high."""
+        if not value:
+            raise ValueError("context_size cannot be empty")
+        value = value.strip().lower()
+        if value not in self._VALID_WEB_CONTEXT_SIZES:
+            raise ValueError(
+                f"context_size must be one of {sorted(self._VALID_WEB_CONTEXT_SIZES)}, "
+                f"got: {value}"
+            )
+        old = self.web_search_context_size
+        self.web_search_context_size = value
+        logger.info(
+            "web_search_context_size changed",
+            extra={"old": old, "new": value},
+        )
+
+    def get_web_search_context_size(self) -> str:
+        """Return current search context size."""
+        return self.web_search_context_size
+
+    def _build_web_search_tool(self) -> Optional[dict]:
+        """
+        Build the OpenRouter web search server tool spec if enabled.
+        
+        Returns:
+            The tool dict ready to be put into ``tools=[...]``, or None if
+            web search is disabled.
+        """
+        if not self.web_search_enabled:
+            return None
+        return {
+            "type": "openrouter:web_search",
+            "parameters": {
+                "engine": self.web_search_engine,
+                "max_results": self.web_search_max_results,
+                "max_total_results": self.web_search_max_total_results,
+                "search_context_size": self.web_search_context_size,
+            },
+        }
+
+    def _current_date_hint(self) -> str:
+        """
+        Return a short system-prompt suffix telling the model the current date.
+        
+        This is important when the web search tool is attached because Exa
+        (and keyword-based engines in general) may surface outdated pages.
+        Without a date anchor, the model faithfully parrots the dates it
+        sees in the search snippets and confidently reports e.g. "today is
+        22 May 2024" while actually answering in 2026. The hint uses the
+        client's configured timezone so "today" matches the user's locale.
+        """
+        try:
+            now_utc = datetime.utcnow().replace(tzinfo=None)
+            # ``convert_to_timezone`` handles None timezone → UTC and unknown
+            # identifiers → UTC with a warning, so we never raise here.
+            localized = convert_to_timezone(now_utc, self.timezone)
+            today = localized.strftime("%Y-%m-%d")
+            tz_label = self.timezone or "UTC"
+        except Exception as e:
+            logger.warning(f"Failed to compute current date hint: {e}")
+            today = datetime.utcnow().strftime("%Y-%m-%d")
+            tz_label = "UTC"
+        
+        return (
+            "\n\nСЕГОДНЯШНЯЯ ДАТА: "
+            f"{today} ({tz_label}). "
+            "Если найденные в веб-поиске материалы датированы более ранним "
+            "периодом, явно оговаривай это и указывай, что данные могут быть "
+            "устаревшими. Не выдавай устаревшие факты за сегодняшние."
+        )
+
+    @staticmethod
+    def _extract_annotations(response) -> list:
+        """
+        Extract web search URL citations from the assistant message.
+        
+        OpenRouter puts them in ``choices[0].message.annotations`` as a list
+        of ``{"type": "url_citation", "url_citation": {...}}``. Some providers
+        also tuck them into ``reasoning_details``. We pick them up from both.
+        """
+        citations = []
+        try:
+            dump = response.model_dump() if hasattr(response, "model_dump") else {}
+            choices = dump.get("choices") or []
+            if not choices:
+                return citations
+            msg = choices[0].get("message") or {}
+            
+            for ann in msg.get("annotations") or []:
+                if not isinstance(ann, dict):
+                    continue
+                if ann.get("type") == "url_citation":
+                    cit = ann.get("url_citation") or {}
+                    url = cit.get("url")
+                    if url:
+                        citations.append({
+                            "url": url,
+                            "title": cit.get("title") or "",
+                        })
+        except Exception as e:
+            logger.warning(f"Failed to extract web search annotations: {e}")
+        return citations
+
+    # Marker that prefixes the "sources" footer appended to web-search
+    # answers. Used both when formatting (see _format_sources_block) and
+    # when deciding whether to disable Telegram's link preview on the
+    # outgoing message.
+    SOURCES_BLOCK_MARKER = "🔗 *Источники:*"
+
+    @staticmethod
+    def _format_sources_block(citations: list, max_items: int = 3) -> str:
+        """
+        Render a short Markdown "Источники" footer from url_citation entries.
+        
+        Deduplicates by URL, truncates to ``max_items`` and escapes markdown
+        characters in titles via MessageFormatter's username-safe rules.
+        Returns an empty string if there are no citations.
+        """
+        if not citations:
+            return ""
+        
+        seen = set()
+        unique = []
+        for c in citations:
+            url = c.get("url")
+            if not url or url in seen:
+                continue
+            seen.add(url)
+            unique.append(c)
+            if len(unique) >= max_items:
+                break
+        
+        if not unique:
+            return ""
+        
+        lines = ["", OpenAIClient.SOURCES_BLOCK_MARKER]
+        for i, c in enumerate(unique, start=1):
+            title = (c.get("title") or c["url"]).strip()
+            # Keep titles short — Telegram lines get unwieldy otherwise.
+            if len(title) > 80:
+                title = title[:77] + "..."
+            # Escape markdown link syntax inside title text.
+            title = title.replace("[", "(").replace("]", ")")
+            lines.append(f"{i}. [{title}]({c['url']})")
+        return "\n".join(lines)
+
+    @staticmethod
+    def _log_web_search_usage(method: str, response) -> None:
+        """Log web search request count from usage.server_tool_use if present."""
+        try:
+            usage = getattr(response, "usage", None)
+            if usage is None:
+                return
+            # Try attribute style first, then dict/dump.
+            stu = getattr(usage, "server_tool_use", None)
+            count = None
+            if stu is not None:
+                count = getattr(stu, "web_search_requests", None)
+            if count is None:
+                dump = response.model_dump() if hasattr(response, "model_dump") else {}
+                count = (
+                    (dump.get("usage") or {})
+                    .get("server_tool_use", {})
+                    .get("web_search_requests")
+                )
+            if count:
+                logger.info(
+                    "Web search tool used",
+                    extra={"method": method, "web_search_requests": count},
+                )
+        except Exception as e:
+            logger.debug(f"Failed to log web search usage: {e}")
 
     @staticmethod
     def _extract_reasoning_fallback(response) -> Optional[str]:
@@ -625,18 +888,40 @@ class OpenAIClient:
         try:
             logger.info(
                 "Sending simple question to OpenAI",
-                extra={"question_length": len(question)}
+                extra={
+                    "question_length": len(question),
+                    "web_search_enabled": self.web_search_enabled,
+                },
             )
             
-            response = await self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": SIMPLE_QUESTION_SYSTEM_PROMPT},
+            # Prepare optional OpenRouter web search server tool.
+            # We only pass it via OpenAI SDK's ``extra_body`` because the tool
+            # schema here is OpenRouter-specific (``type`` is a literal
+            # "openrouter:web_search"), and the SDK would reject it in its
+            # strict ``tools`` typing otherwise.
+            system_content = SIMPLE_QUESTION_SYSTEM_PROMPT
+            if self.web_search_enabled:
+                # When web search is on, both the date anchor and the
+                # "use the tool" rule become relevant. We append them as
+                # a single block so the system prompt stays compact when
+                # search is off (no unused rule for a missing tool).
+                system_content += WEB_SEARCH_RULE_SUFFIX
+                system_content += self._current_date_hint()
+            
+            request_kwargs = {
+                "model": self.model,
+                "messages": [
+                    {"role": "system", "content": system_content},
                     {"role": "user", "content": question}
                 ],
-                max_tokens=self.inline_max_tokens,
-                temperature=0.8
-            )
+                "max_tokens": self.inline_max_tokens,
+                "temperature": 0.8,
+            }
+            web_tool = self._build_web_search_tool()
+            if web_tool is not None:
+                request_kwargs["extra_body"] = {"tools": [web_tool]}
+            
+            response = await self.client.chat.completions.create(**request_kwargs)
             
             answer = response.choices[0].message.content
             
@@ -658,6 +943,15 @@ class OpenAIClient:
                         "Recovered answer from reasoning fallback",
                         extra={"method": "answer_question_simple", "recovered_length": len(answer)},
                     )
+            
+            # Append "Источники" block if web search produced citations.
+            if self.web_search_enabled and answer:
+                self._log_web_search_usage("answer_question_simple", response)
+                sources_block = self._format_sources_block(
+                    self._extract_annotations(response)
+                )
+                if sources_block:
+                    answer = f"{answer}\n{sources_block}"
             
             return answer or "Что-то пошло не так! Господи помилуй."
             

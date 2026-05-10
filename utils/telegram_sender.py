@@ -50,9 +50,13 @@ async def typing_loop(chat_id: int, bot: Bot, stop_event: asyncio.Event, max_dur
         logger.debug(f"Typing loop stopped: {e}")
 
 
-async def safe_reply(message: Message, text: str, parse_mode = None) -> Message:
+async def safe_reply(message: Message, text: str, parse_mode=None) -> Message:
     """
     Отправить ответ реплаем, с fallback на обычный answer если сообщение удалено.
+    
+    Link previews are disabled globally via Bot's ``DefaultBotProperties``
+    (``link_preview_is_disabled=True``), so callers never need to pass
+    that flag explicitly.
     
     Args:
         message: Исходное сообщение

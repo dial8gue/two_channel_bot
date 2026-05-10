@@ -69,6 +69,11 @@ async def set_commands():
             BotCommand(command="stop_collection", description="Остановить сбор сообщений"),
             BotCommand(command="toggle_vision", description="Вкл/выкл распознавание изображений"),
             BotCommand(command="toggle_guest", description="Вкл/выкл Guest Mode"),
+            BotCommand(command="toggle_web_search", description="Вкл/выкл Web Search (OpenRouter)"),
+            BotCommand(command="set_web_engine", description="Движок Web Search"),
+            BotCommand(command="set_web_max_results", description="Max результатов на поиск"),
+            BotCommand(command="set_web_max_total_results", description="Max суммарных результатов"),
+            BotCommand(command="set_web_context_size", description="Размер фрагмента Web Search"),
             BotCommand(command="manage_groups", description="Управление группами"),
         ]
         

@@ -405,6 +405,10 @@ class MessageFormatter:
             ('vision_max_tokens', 'vision\\_max\\_tokens: *{value}*', False),
             ('inline_debounce_seconds', 'inline\\_debounce (/ask): *{value} сек*', False),
             ('guest_debounce_seconds', 'guest\\_debounce (/guest): *{value} сек*', False),
+            ('web_search_engine', 'web\\_search engine: `{value}`', False),
+            ('web_search_max_results', 'web\\_search max\\_results: *{value}*', False),
+            ('web_search_max_total_results', 'web\\_search max\\_total\\_results: *{value}*', False),
+            ('web_search_context_size', 'web\\_search context\\_size: `{value}`', False),
         ]
         
         BULLET = "•"
@@ -440,6 +444,17 @@ class MessageFormatter:
                     status_text = f"Guest Mode: {ON} Включен"
                 else:
                     status_text = f"Guest Mode: {OFF} Выключен"
+                message_parts.append(f"{BULLET} {status_text}")
+            
+            # Special case for web_search_enabled (tri-state: True/False/None)
+            if 'web_search_enabled' in stats:
+                value = stats['web_search_enabled']
+                if value is None:
+                    status_text = "Web Search: _не задан_ (по умолчанию из env)"
+                elif value:
+                    status_text = f"Web Search: {ON} Включен"
+                else:
+                    status_text = f"Web Search: {OFF} Выключен"
                 message_parts.append(f"{BULLET} {status_text}")
             
             logger.debug("Formatted statistics message")

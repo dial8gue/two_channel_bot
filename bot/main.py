@@ -123,7 +123,12 @@ async def main() -> None:
             timezone=config.timezone,
             vision_model=config.vision_model,
             vision_enabled=config.vision_enabled,
-            vision_max_tokens=config.vision_max_tokens
+            vision_max_tokens=config.vision_max_tokens,
+            web_search_enabled=config.web_search_enabled,
+            web_search_engine=config.web_search_engine,
+            web_search_max_results=config.web_search_max_results,
+            web_search_max_total_results=config.web_search_max_total_results,
+            web_search_context_size=config.web_search_context_size,
         )
         
         # Check if there's a saved model in database and apply it
@@ -183,6 +188,43 @@ async def main() -> None:
             openai_client.vision_enabled = saved_vision.lower() == "true"
             logger.info(f"Loaded saved vision setting from database: {openai_client.vision_enabled}")
         
+        # Web Search overrides from database (feature is OpenRouter-specific)
+        saved_web_enabled = await config_repository.get("web_search_enabled")
+        if saved_web_enabled is not None:
+            openai_client.set_web_search_enabled(saved_web_enabled.lower() == "true")
+            logger.info(
+                f"Loaded saved web_search_enabled from database: "
+                f"{openai_client.get_web_search_enabled()}"
+            )
+        
+        saved_web_engine = await config_repository.get("web_search_engine")
+        if saved_web_engine:
+            try:
+                openai_client.set_web_search_engine(saved_web_engine)
+                logger.info(f"Loaded saved web_search_engine from database: {saved_web_engine}")
+            except ValueError as e:
+                logger.warning(f"Invalid saved web_search_engine='{saved_web_engine}': {e}")
+        
+        saved_web_ctx = await config_repository.get("web_search_context_size")
+        if saved_web_ctx:
+            try:
+                openai_client.set_web_search_context_size(saved_web_ctx)
+                logger.info(f"Loaded saved web_search_context_size from database: {saved_web_ctx}")
+            except ValueError as e:
+                logger.warning(f"Invalid saved web_search_context_size='{saved_web_ctx}': {e}")
+        
+        for cfg_key, setter, label in [
+            ("web_search_max_results", openai_client.set_web_search_max_results, "web_search_max_results"),
+            ("web_search_max_total_results", openai_client.set_web_search_max_total_results, "web_search_max_total_results"),
+        ]:
+            saved = await config_repository.get(cfg_key)
+            if saved:
+                try:
+                    setter(int(saved))
+                    logger.info(f"Loaded saved {label} from database: {saved}")
+                except (ValueError, TypeError) as e:
+                    logger.warning(f"Invalid saved {label}='{saved}' in database: {e}")
+        
         # Create service instances
         logger.info("Creating service instances...")
         message_service = MessageService(
@@ -231,7 +273,14 @@ async def main() -> None:
         logger.info("Initializing bot and dispatcher...")
         bot = Bot(
             token=config.bot_token,
-            default=DefaultBotProperties(parse_mode=ParseMode.MARKDOWN)
+            default=DefaultBotProperties(
+                parse_mode=ParseMode.MARKDOWN,
+                # Never expand inline link previews — the bot's replies are
+                # meant to be read inline, and previews (especially for the
+                # first citation in web-search answers) push the real text
+                # under a large preview card.
+                link_preview_is_disabled=True,
+            )
         )
         
         dp = Dispatcher()

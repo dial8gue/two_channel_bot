@@ -1085,6 +1085,206 @@ def create_admin_router(config: Config) -> Router:
             await message.answer("❌ Ошибка при переключении распознавания изображений.")
     
     
+    @router.message(Command("toggle_web_search"), admin_filter)
+    async def cmd_toggle_web_search(
+        message: Message,
+        admin_service: AdminService,
+        openai_client: OpenAIClient,
+        config: Config,
+    ):
+        """
+        Toggle OpenRouter web search server tool on/off.
+        
+        Note: this only makes sense when OPENAI_BASE_URL points to OpenRouter
+        (https://openrouter.ai/api/v1). On other providers the tool spec is
+        silently ignored.
+        """
+        try:
+            # Resolve effective current value (DB override → env default)
+            override = await admin_service.is_web_search_enabled()
+            current = override if override is not None else config.web_search_enabled
+            new_state = not current
+            
+            await admin_service.toggle_web_search(new_state)
+            openai_client.set_web_search_enabled(new_state)
+            
+            status = "включен ✅" if new_state else "выключен ❌"
+            hint = (
+                "\n\n⚠️ Работает только через OpenRouter "
+                "(OPENAI\\_BASE\\_URL=https://openrouter.ai/api/v1)."
+                if new_state else ""
+            )
+            await message.answer(
+                f"🌐 Web Search: {status}{hint}",
+                parse_mode=ParseMode.MARKDOWN,
+            )
+            
+            logger.info(
+                "Web search toggled",
+                extra={"admin_id": message.from_user.id, "web_search_enabled": new_state},
+            )
+        except Exception as e:
+            logger.error(
+                f"Error toggling web search: {e}",
+                extra={"admin_id": message.from_user.id if message.from_user else None},
+                exc_info=True,
+            )
+            await message.answer("❌ Ошибка при переключении Web Search.")
+    
+    @router.message(Command("set_web_engine"), admin_filter)
+    async def cmd_set_web_engine(
+        message: Message,
+        admin_service: AdminService,
+        openai_client: OpenAIClient,
+    ):
+        """
+        Set web search engine: auto | native | exa | firecrawl | parallel.
+        
+        Default is `exa` — works with any model, BYOK not required.
+        """
+        try:
+            if not message.text or len(message.text.split()) < 2:
+                current = openai_client.get_web_search_engine()
+                await message.answer(
+                    f"Текущий движок поиска: `{current}`\n\n"
+                    "Использование: /set\\_web\\_engine <движок>\n\n"
+                    "Допустимые значения:\n"
+                    "• `auto` — native если есть, иначе Exa\n"
+                    "• `exa` — универсальный (рекомендуется)\n"
+                    "• `native` — встроенный поиск провайдера\n"
+                    "• `firecrawl` — требует BYOK Firecrawl\n"
+                    "• `parallel` — через Parallel API",
+                    parse_mode=ParseMode.MARKDOWN,
+                )
+                return
+            
+            engine = message.text.split(maxsplit=1)[1].strip()
+            
+            try:
+                # Validate via client first (raises ValueError if invalid)
+                openai_client.set_web_search_engine(engine)
+            except ValueError as ve:
+                await message.answer(f"❌ {ve}")
+                return
+            
+            await admin_service.set_web_search_engine(engine)
+            
+            await message.answer(
+                f"✅ Движок web\\_search: `{openai_client.get_web_search_engine()}`",
+                parse_mode=ParseMode.MARKDOWN,
+            )
+            
+            logger.info(
+                "web_search_engine updated",
+                extra={"admin_id": message.from_user.id, "engine": engine},
+            )
+        except Exception as e:
+            logger.error(
+                f"Error setting web_search_engine: {e}",
+                extra={"admin_id": message.from_user.id if message.from_user else None},
+                exc_info=True,
+            )
+            await message.answer("❌ Ошибка при изменении движка поиска.")
+    
+    @router.message(Command("set_web_context_size"), admin_filter)
+    async def cmd_set_web_context_size(
+        message: Message,
+        admin_service: AdminService,
+        openai_client: OpenAIClient,
+    ):
+        """
+        Set search_context_size: low | medium | high.
+        
+        Controls how much text from each result lands in the prompt. `low`
+        minimises prompt_tokens and cost.
+        """
+        try:
+            if not message.text or len(message.text.split()) < 2:
+                current = openai_client.get_web_search_context_size()
+                await message.answer(
+                    f"Текущий context\\_size: `{current}`\n\n"
+                    "Использование: /set\\_web\\_context\\_size <значение>\n\n"
+                    "Допустимые значения:\n"
+                    "• `low` — короткие сниппеты (дешевле)\n"
+                    "• `medium` — среднее\n"
+                    "• `high` — длинные фрагменты (дороже)",
+                    parse_mode=ParseMode.MARKDOWN,
+                )
+                return
+            
+            value = message.text.split(maxsplit=1)[1].strip()
+            
+            try:
+                openai_client.set_web_search_context_size(value)
+            except ValueError as ve:
+                await message.answer(f"❌ {ve}")
+                return
+            
+            await admin_service.set_web_search_context_size(value)
+            
+            await message.answer(
+                f"✅ web\\_search context\\_size: "
+                f"`{openai_client.get_web_search_context_size()}`",
+                parse_mode=ParseMode.MARKDOWN,
+            )
+            
+            logger.info(
+                "web_search_context_size updated",
+                extra={"admin_id": message.from_user.id, "value": value},
+            )
+        except Exception as e:
+            logger.error(
+                f"Error setting web_search_context_size: {e}",
+                extra={"admin_id": message.from_user.id if message.from_user else None},
+                exc_info=True,
+            )
+            await message.answer("❌ Ошибка при изменении context_size.")
+    
+    @router.message(Command("set_web_max_results"), admin_filter)
+    async def cmd_set_web_max_results(
+        message: Message,
+        admin_service: AdminService,
+        openai_client: OpenAIClient,
+    ):
+        """Set max results per single search call (1..25)."""
+        await _handle_int_setting(
+            message,
+            value_name="web_search_max_results",
+            current_getter=openai_client.get_web_search_max_results,
+            persist=admin_service.set_web_search_max_results,
+            apply_live=openai_client.set_web_search_max_results,
+            usage_examples=(
+                "Примеры:\n"
+                "• `3` — экономно (стандартно)\n"
+                "• `5` — более широкий охват\n"
+                "• `10` — больше результатов, больше токенов"
+            ),
+        )
+    
+    @router.message(Command("set_web_max_total_results"), admin_filter)
+    async def cmd_set_web_max_total_results(
+        message: Message,
+        admin_service: AdminService,
+        openai_client: OpenAIClient,
+    ):
+        """Set max total results across all search calls in a single request."""
+        await _handle_int_setting(
+            message,
+            value_name="web_search_max_total_results",
+            current_getter=openai_client.get_web_search_max_total_results,
+            persist=admin_service.set_web_search_max_total_results,
+            apply_live=openai_client.set_web_search_max_total_results,
+            usage_examples=(
+                "Жёсткий потолок на один пользовательский вопрос "
+                "(защита от агентских петель).\n\n"
+                "Примеры:\n"
+                "• `3` — стандартно\n"
+                "• `5`\n"
+                "• `10`"
+            ),
+        )
+    
+    
     @router.message(Command("toggle_guest"), admin_filter)
     async def cmd_toggle_guest(
         message: Message,

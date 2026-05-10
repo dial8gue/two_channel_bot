@@ -130,6 +130,12 @@ async def _safe_answer_guest(message: Message, text: str) -> None:
     Bot API 10.0 requires the reply to be wrapped in an ``InlineQueryResult``
     (the same primitive used for inline mode), so we build an
     ``InlineQueryResultArticle`` with ``InputTextMessageContent``.
+    
+    Note: Bot-level ``link_preview_is_disabled`` does NOT propagate into
+    ``InputTextMessageContent``, because the content is sent by Telegram
+    on the bot's behalf rather than via a Bot API method. So we set the
+    flag explicitly here to keep guest replies consistent with regular
+    replies.
     """
 
     def _build(parse_mode: Optional[str], body: str) -> InlineQueryResultArticle:
@@ -141,6 +147,7 @@ async def _safe_answer_guest(message: Message, text: str) -> None:
             input_message_content=InputTextMessageContent(
                 message_text=body,
                 parse_mode=parse_mode,
+                disable_web_page_preview=True,
             ),
         )
 

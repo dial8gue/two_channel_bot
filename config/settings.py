@@ -69,6 +69,13 @@ class Config:
     guest_mode_enabled: bool
     guest_debounce_seconds: int
     
+    # Web Search (OpenRouter server tool: openrouter:web_search)
+    web_search_enabled: bool
+    web_search_engine: str  # auto | native | exa | firecrawl | parallel
+    web_search_max_results: int
+    web_search_max_total_results: int
+    web_search_context_size: str  # low | medium | high
+    
     @classmethod
     def from_env(cls) -> "Config":
         """
@@ -117,6 +124,13 @@ class Config:
         guest_mode_enabled = cls._get_bool_env("GUEST_MODE_ENABLED", default=False)
         guest_debounce_seconds = cls._get_int_env("GUEST_DEBOUNCE_SECONDS", default=60)
         
+        # Web Search (OpenRouter server tool)
+        web_search_enabled = cls._get_bool_env("WEB_SEARCH_ENABLED", default=False)
+        web_search_engine = os.getenv("WEB_SEARCH_ENGINE", "exa").strip().lower()
+        web_search_max_results = cls._get_int_env("WEB_SEARCH_MAX_RESULTS", default=3)
+        web_search_max_total_results = cls._get_int_env("WEB_SEARCH_MAX_TOTAL_RESULTS", default=3)
+        web_search_context_size = os.getenv("WEB_SEARCH_CONTEXT_SIZE", "low").strip().lower()
+        
         # Validate positive values
         cls._validate_positive("MAX_TOKENS", max_tokens)
         cls._validate_positive("STORAGE_PERIOD_HOURS", storage_period_hours)
@@ -131,6 +145,24 @@ class Config:
         cls._validate_positive("INLINE_MAX_TOKENS", inline_max_tokens)
         cls._validate_positive("VISION_MAX_TOKENS", vision_max_tokens)
         cls._validate_positive("GUEST_DEBOUNCE_SECONDS", guest_debounce_seconds)
+        cls._validate_positive("WEB_SEARCH_MAX_RESULTS", web_search_max_results)
+        cls._validate_positive("WEB_SEARCH_MAX_TOTAL_RESULTS", web_search_max_total_results)
+        
+        # Validate web search engine
+        valid_engines = {"auto", "native", "exa", "firecrawl", "parallel"}
+        if web_search_engine not in valid_engines:
+            raise ValueError(
+                f"WEB_SEARCH_ENGINE must be one of {sorted(valid_engines)}, "
+                f"got: {web_search_engine}"
+            )
+        
+        # Validate web search context size
+        valid_context_sizes = {"low", "medium", "high"}
+        if web_search_context_size not in valid_context_sizes:
+            raise ValueError(
+                f"WEB_SEARCH_CONTEXT_SIZE must be one of {sorted(valid_context_sizes)}, "
+                f"got: {web_search_context_size}"
+            )
         
         # Validate parse mode
         valid_parse_modes = ["Markdown", "HTML", "None", None]
@@ -166,6 +198,11 @@ class Config:
             vision_max_tokens=vision_max_tokens,
             guest_mode_enabled=guest_mode_enabled,
             guest_debounce_seconds=guest_debounce_seconds,
+            web_search_enabled=web_search_enabled,
+            web_search_engine=web_search_engine,
+            web_search_max_results=web_search_max_results,
+            web_search_max_total_results=web_search_max_total_results,
+            web_search_context_size=web_search_context_size,
         )
     
     @staticmethod

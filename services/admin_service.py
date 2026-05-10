@@ -30,6 +30,11 @@ class AdminService:
     CONFIG_INLINE_DEBOUNCE_SECONDS = "inline_debounce_seconds"
     CONFIG_GUEST_MODE_ENABLED = "guest_mode_enabled"
     CONFIG_GUEST_DEBOUNCE_SECONDS = "guest_debounce_seconds"
+    CONFIG_WEB_SEARCH_ENABLED = "web_search_enabled"
+    CONFIG_WEB_SEARCH_ENGINE = "web_search_engine"
+    CONFIG_WEB_SEARCH_MAX_RESULTS = "web_search_max_results"
+    CONFIG_WEB_SEARCH_MAX_TOTAL_RESULTS = "web_search_max_total_results"
+    CONFIG_WEB_SEARCH_CONTEXT_SIZE = "web_search_context_size"
     
     def __init__(
         self,
@@ -609,6 +614,137 @@ class AdminService:
         except Exception as e:
             logger.error(f"Failed to check vision status: {e}", exc_info=True)
             return True
+
+    # ------------------------------------------------------------------ #
+    # Web Search (OpenRouter server tool)                                #
+    # ------------------------------------------------------------------ #
+
+    async def toggle_web_search(self, enabled: bool) -> None:
+        """Enable or disable OpenRouter web search server tool."""
+        try:
+            await self.config_repository.set(
+                key=self.CONFIG_WEB_SEARCH_ENABLED,
+                value="true" if enabled else "false",
+            )
+            status = "enabled" if enabled else "disabled"
+            logger.info(
+                f"Web search {status}",
+                extra={"web_search_enabled": enabled},
+            )
+        except Exception as e:
+            logger.error(
+                f"Failed to toggle web search: {e}",
+                extra={"enabled": enabled},
+                exc_info=True,
+            )
+            raise
+
+    async def is_web_search_enabled(self) -> Optional[bool]:
+        """
+        Return persisted web_search_enabled override, or None if not set.
+        
+        None means "use env default" — callers should fall back to Config.
+        """
+        try:
+            value = await self.config_repository.get(self.CONFIG_WEB_SEARCH_ENABLED)
+            if value is None:
+                return None
+            return value.lower() == "true"
+        except Exception as e:
+            logger.error(f"Failed to read web_search_enabled: {e}", exc_info=True)
+            return None
+
+    async def set_web_search_engine(self, engine: str) -> None:
+        """Set web search engine. Validation is delegated to OpenAIClient."""
+        try:
+            if not engine or not engine.strip():
+                raise ValueError("engine cannot be empty")
+            engine = engine.strip().lower()
+            await self.config_repository.set(
+                key=self.CONFIG_WEB_SEARCH_ENGINE,
+                value=engine,
+            )
+            logger.info(
+                "Web search engine updated",
+                extra={"web_search_engine": engine},
+            )
+        except ValueError:
+            raise
+        except Exception as e:
+            logger.error(
+                f"Failed to set web search engine: {e}",
+                extra={"engine": engine},
+                exc_info=True,
+            )
+            raise
+
+    async def get_web_search_engine(self) -> Optional[str]:
+        """Return persisted web_search_engine override, or None if not set."""
+        try:
+            value = await self.config_repository.get(self.CONFIG_WEB_SEARCH_ENGINE)
+            return value if value else None
+        except Exception as e:
+            logger.error(f"Failed to get web search engine: {e}", exc_info=True)
+            return None
+
+    async def set_web_search_max_results(self, value: int) -> None:
+        """Persist max results per single search call."""
+        await self._set_positive_int(
+            self.CONFIG_WEB_SEARCH_MAX_RESULTS, value, "web_search_max_results"
+        )
+
+    async def get_web_search_max_results(self) -> Optional[int]:
+        """Return persisted web_search_max_results override, or None if not set."""
+        return await self._get_optional_int(self.CONFIG_WEB_SEARCH_MAX_RESULTS)
+
+    async def set_web_search_max_total_results(self, value: int) -> None:
+        """Persist max total results across all search calls in a single request."""
+        await self._set_positive_int(
+            self.CONFIG_WEB_SEARCH_MAX_TOTAL_RESULTS,
+            value,
+            "web_search_max_total_results",
+        )
+
+    async def get_web_search_max_total_results(self) -> Optional[int]:
+        """Return persisted web_search_max_total_results override, or None."""
+        return await self._get_optional_int(self.CONFIG_WEB_SEARCH_MAX_TOTAL_RESULTS)
+
+    async def set_web_search_context_size(self, value: str) -> None:
+        """Persist search_context_size. Validation is delegated to OpenAIClient."""
+        try:
+            if not value or not value.strip():
+                raise ValueError("context_size cannot be empty")
+            value = value.strip().lower()
+            await self.config_repository.set(
+                key=self.CONFIG_WEB_SEARCH_CONTEXT_SIZE,
+                value=value,
+            )
+            logger.info(
+                "Web search context size updated",
+                extra={"web_search_context_size": value},
+            )
+        except ValueError:
+            raise
+        except Exception as e:
+            logger.error(
+                f"Failed to set web search context size: {e}",
+                extra={"value": value},
+                exc_info=True,
+            )
+            raise
+
+    async def get_web_search_context_size(self) -> Optional[str]:
+        """Return persisted web_search_context_size override, or None."""
+        try:
+            value = await self.config_repository.get(
+                self.CONFIG_WEB_SEARCH_CONTEXT_SIZE
+            )
+            return value if value else None
+        except Exception as e:
+            logger.error(
+                f"Failed to get web search context size: {e}", exc_info=True
+            )
+            return None
     
     async def get_stats(self) -> Dict[str, Any]:
         """
@@ -716,6 +852,17 @@ class AdminService:
             stats['guest_mode_enabled'] = await self.is_guest_mode_enabled()
             guest_debounce = await self.get_guest_debounce_seconds()
             stats['guest_debounce_seconds'] = guest_debounce if guest_debounce is not None else "Default (from env)"
+            
+            # Web Search settings (OpenRouter server tool)
+            stats['web_search_enabled'] = await self.is_web_search_enabled()
+            web_engine = await self.get_web_search_engine()
+            stats['web_search_engine'] = web_engine if web_engine else "Default (from env)"
+            web_max = await self.get_web_search_max_results()
+            stats['web_search_max_results'] = web_max if web_max is not None else "Default (from env)"
+            web_total = await self.get_web_search_max_total_results()
+            stats['web_search_max_total_results'] = web_total if web_total is not None else "Default (from env)"
+            web_ctx = await self.get_web_search_context_size()
+            stats['web_search_context_size'] = web_ctx if web_ctx else "Default (from env)"
             
             logger.info(
                 "Statistics gathered successfully",
